@@ -3,22 +3,25 @@ import styled from 'styled-components';
 export const Overlay = styled.div`
   position: fixed;
   inset: 0;
-  background: rgba(5, 9, 20, 0.85);
+  background: rgba(5, 9, 20, 0.92);
   z-index: 50;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1rem;
-  overflow-y: auto;
+  padding: 1.5rem;
 `;
 
 export const Panel = styled.div`
   width: min(1160px, 100%);
+  max-height: calc(100vh - 3rem);
   background: #0b1222;
   border-radius: 24px;
   box-shadow: 0 32px 100px rgba(0, 0, 0, 0.35);
   padding: 1.5rem;
   position: relative;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 `;
 
 export const LoadingPanel = styled(Panel)`
@@ -74,14 +77,18 @@ export const ImageContainer = styled.div`
 `;
 
 export const Summary = styled.div`
+  min-width: 0;
+
   h2 {
     margin: 0 0 0.75rem;
     font-size: clamp(2rem, 2.5vw, 2.5rem);
+    word-break: break-word;
   }
 
   p {
     color: rgba(255, 255, 255, 0.8);
     line-height: 1.75;
+    word-break: break-word;
   }
 `;
 
@@ -90,6 +97,7 @@ export const Tags = styled.div`
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 1rem;
+  min-width: 0;
 
   span {
     background: rgba(255, 255, 255, 0.08);
@@ -111,6 +119,7 @@ export const Body = styled.div`
   }
 
   section {
+    min-width: 0;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 20px;
@@ -142,6 +151,10 @@ export const NutritionGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.85rem;
+
+  @media (max-width: 640px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 export const NutritionItem = styled.div`

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useRecipes } from '../contexts/RecipeContext';
 import {
   Overlay,
@@ -28,6 +29,16 @@ const getImage = (recipe) => {
 export default function RecipeDetails() {
   const { state, closeRecipeDetail } = useRecipes();
   const { selectedRecipe, loading } = state;
+
+  useEffect(() => {
+    const bodyOverflow = document.body.style.overflow;
+    if (selectedRecipe || loading) {
+      document.body.style.overflow = 'hidden';
+    }
+    return () => {
+      document.body.style.overflow = bodyOverflow;
+    };
+  }, [selectedRecipe, loading]);
 
   if (!selectedRecipe && !loading) return null;
 
