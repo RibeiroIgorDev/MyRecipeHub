@@ -1,4 +1,6 @@
-.recipe-card {
+import styled from 'styled-components';
+
+export const CardContainer = styled.article`
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 22px;
@@ -7,21 +9,22 @@
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
-}
 
-.recipe-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.18);
-}
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 45px rgba(0, 0, 0, 0.18);
+  }
+`;
 
-.recipe-card-image {
+export const CardImage = styled.div`
   min-height: 180px;
   background-size: cover;
   background-position: center;
+  background-image: ${(props) => (props.src ? `url(${props.src})` : 'none')};
   position: relative;
-}
+`;
 
-.recipe-card-placeholder {
+export const CardPlaceholder = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
@@ -29,32 +32,33 @@
   color: rgba(255, 255, 255, 0.6);
   font-size: 0.95rem;
   background: rgba(255, 255, 255, 0.05);
-}
+`;
 
-.recipe-card-content {
+export const CardContent = styled.div`
   padding: 1.25rem;
   flex: 1;
   display: flex;
   flex-direction: column;
-}
 
-.recipe-card-content h3 {
-  margin: 0 0 0.75rem;
-  font-size: 1.15rem;
-  line-height: 1.3;
-}
+  h3 {
+    margin: 0 0 0.75rem;
+    font-size: 1.15rem;
+    line-height: 1.3;
+  }
 
-.recipe-card-content p {
-  margin: 0 0 1rem;
-  color: rgba(255, 255, 255, 0.75);
-  flex: 1;
-}
+  p {
+    margin: 0 0 1rem;
+    color: rgba(255, 255, 255, 0.75);
+    flex: 1;
+    font-size: 0.95rem;
+  }
+`;
 
-.recipe-card-meta {
+export const CardMeta = styled.div`
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
   font-size: 0.88rem;
   color: rgba(255, 255, 255, 0.7);
   gap: 0.5rem;
-}
+`;

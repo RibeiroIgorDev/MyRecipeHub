@@ -1,5 +1,19 @@
-import React from 'react';
-import './RecipeDetails.css';
+import { useRecipes } from '../contexts/RecipeContext';
+import {
+  Overlay,
+  Panel,
+  LoadingPanel,
+  LoadingMessage,
+  CloseButton,
+  Header,
+  ImageContainer,
+  Summary,
+  Tags,
+  Body,
+  NutritionGrid,
+  NutritionItem,
+} from './RecipeDetails.styles';
+import { CardPlaceholder } from './RecipeCard.styles';
 
 const normalizeArray = (value) => {
   if (!value) return [];
@@ -11,55 +25,58 @@ const getImage = (recipe) => {
   return recipe.image || recipe.photo || recipe.thumbnail || recipe.photo_url || '';
 };
 
-export default function RecipeDetails({ recipe, loading = false, onClose }) {
-  if (!recipe && !loading) return null;
+export default function RecipeDetails() {
+  const { state, closeRecipeDetail } = useRecipes();
+  const { selectedRecipe, loading } = state;
 
-  if (loading && !recipe) {
+  if (!selectedRecipe && !loading) return null;
+
+  if (loading && !selectedRecipe) {
     return (
-      <div className="recipe-details-overlay" role="dialog" aria-modal="true">
-        <div className="recipe-details-panel loading-panel">
-          <button className="recipe-details-close" onClick={onClose} aria-label="Fechar detalhes">
+      <Overlay role="dialog" aria-modal="true">
+        <LoadingPanel>
+          <CloseButton onClick={closeRecipeDetail} aria-label="Fechar detalhes">
             ×
-          </button>
-          <div className="loading-message">Carregando receita...</div>
-        </div>
-      </div>
+          </CloseButton>
+          <LoadingMessage>Carregando receita...</LoadingMessage>
+        </LoadingPanel>
+      </Overlay>
     );
   }
 
-  const instructions = normalizeArray(recipe.instructions);
-  const ingredients = Array.isArray(recipe.ingredients)
-    ? recipe.ingredients
-    : normalizeArray(recipe.ingredients).map((item) => ({ name: item }));
-  const nutrition = recipe.nutrition || recipe.nutrition_info || recipe.nutrition_data || {};
+  if (!selectedRecipe) return null;
+
+  const instructions = normalizeArray(selectedRecipe.instructions);
+  const ingredients = Array.isArray(selectedRecipe.ingredients)
+    ? selectedRecipe.ingredients
+    : normalizeArray(selectedRecipe.ingredients).map((item) => ({ name: item }));
+  const nutrition = selectedRecipe.nutrition || selectedRecipe.nutrition_info || selectedRecipe.nutrition_data || {};
 
   return (
-    <div className="recipe-details-overlay" role="dialog" aria-modal="true">
-      <div className="recipe-details-panel">
-        <button className="recipe-details-close" onClick={onClose} aria-label="Fechar detalhes">
+    <Overlay role="dialog" aria-modal="true">
+      <Panel>
+        <CloseButton onClick={closeRecipeDetail} aria-label="Fechar detalhes">
           ×
-        </button>
-        <div className="recipe-details-header">
-          <div className="recipe-details-image" style={{ backgroundImage: `url(${getImage(recipe)})` }}>
-            {!getImage(recipe) && <div className="recipe-card-placeholder">Sem imagem</div>}
-          </div>
-          <div className="recipe-details-summary">
-            <h2>{recipe.name}</h2>
-            {recipe.description && <p>{recipe.description}</p>}
-            <div className="recipe-details-tags">
-              {recipe.cuisine && <span>{recipe.cuisine}</span>}
-              {recipe.diet && <span>{recipe.diet}</span>}
-              {recipe.meal_type && <span>{recipe.meal_type}</span>}
-            </div>
-            <div className="recipe-details-info">
-              {recipe.servings && <span>Rende {recipe.servings}</span>}
-              {recipe.prep_time && <span>Prep {recipe.prep_time} min</span>}
-              {recipe.cook_time && <span>Cook {recipe.cook_time} min</span>}
-            </div>
-          </div>
-        </div>
+        </CloseButton>
+        <Header>
+          <ImageContainer src={getImage(selectedRecipe)}>
+            {!getImage(selectedRecipe) && <CardPlaceholder>Sem imagem</CardPlaceholder>}
+          </ImageContainer>
+          <Summary>
+            <h2>{selectedRecipe.name}</h2>
+            {selectedRecipe.description && <p>{selectedRecipe.description}</p>}
+            <Tags>
+              {selectedRecipe.cuisine && <span>{selectedRecipe.cuisine}</span>}
+              {selectedRecipe.diet && <span>{selectedRecipe.diet}</span>}
+              {selectedRecipe.meal_type && <span>{selectedRecipe.meal_type}</span>}
+              {selectedRecipe.servings && <span>Rende {selectedRecipe.servings}</span>}
+              {selectedRecipe.prep_time && <span>Prep {selectedRecipe.prep_time} min</span>}
+              {selectedRecipe.cook_time && <span>Cook {selectedRecipe.cook_time} min</span>}
+            </Tags>
+          </Summary>
+        </Header>
 
-        <div className="recipe-details-body">
+        <Body>
           <section>
             <h3>Ingredientes</h3>
             {ingredients.length > 0 ? (
@@ -89,18 +106,18 @@ export default function RecipeDetails({ recipe, loading = false, onClose }) {
           {Object.keys(nutrition).length > 0 && (
             <section>
               <h3>Informações Nutricionais</h3>
-              <div className="nutrition-grid">
+              <NutritionGrid>
                 {Object.entries(nutrition).map(([key, value]) => (
-                  <div key={key} className="nutrition-item">
+                  <NutritionItem key={key}>
                     <strong>{key.replace(/_/g, ' ')}</strong>
                     <span>{value}</span>
-                  </div>
+                  </NutritionItem>
                 ))}
-              </div>
+              </NutritionGrid>
             </section>
           )}
-        </div>
-      </div>
-    </div>
+        </Body>
+      </Panel>
+    </Overlay>
   );
 }

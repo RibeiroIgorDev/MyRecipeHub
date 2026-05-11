@@ -1,5 +1,11 @@
-import React from 'react';
-import './RecipeCard.css';
+import { useRecipes } from '../contexts/RecipeContext';
+import {
+  CardContainer,
+  CardImage,
+  CardPlaceholder,
+  CardContent,
+  CardMeta,
+} from './RecipeCard.styles';
 
 const getImage = (recipe) => {
   return recipe.image || recipe.photo || recipe.thumbnail || recipe.photo_url || '';
@@ -13,20 +19,26 @@ const getSubtitle = (recipe) => {
   return tags.join(' • ');
 };
 
-export default function RecipeCard({ recipe, onSelect }) {
+export default function RecipeCard({ recipe }) {
+  const { getRecipeDetail } = useRecipes();
+
+  const handleClick = () => {
+    getRecipeDetail(recipe.id);
+  };
+
   return (
-    <article className="recipe-card" onClick={() => onSelect(recipe)}>
-      <div className="recipe-card-image" style={{ backgroundImage: `url(${getImage(recipe)})` }}>
-        {!getImage(recipe) && <div className="recipe-card-placeholder">Sem imagem</div>}
-      </div>
-      <div className="recipe-card-content">
+    <CardContainer onClick={handleClick}>
+      <CardImage src={getImage(recipe)}>
+        {!getImage(recipe) && <CardPlaceholder>Sem imagem</CardPlaceholder>}
+      </CardImage>
+      <CardContent>
         <h3>{recipe.name || 'Receita desconhecida'}</h3>
         {recipe.description && <p>{recipe.description}</p>}
-        <div className="recipe-card-meta">
+        <CardMeta>
           <span>{getSubtitle(recipe)}</span>
           {recipe.prep_time && <span>{recipe.prep_time} min</span>}
-        </div>
-      </div>
-    </article>
+        </CardMeta>
+      </CardContent>
+    </CardContainer>
   );
 }

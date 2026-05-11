@@ -1,83 +1,47 @@
-import { useEffect, useState } from 'react';
-import './App.css';
+import { useEffect } from 'react';
+import { RecipeProvider, useRecipes } from './contexts/RecipeContext';
 import SearchBar from './components/SearchBar';
 import RecipeCard from './components/RecipeCard';
 import RecipeDetails from './components/RecipeDetails';
-import { getRecipeDetail, searchRecipes } from './services/recipeApi';
+import {
+  AppContainer,
+  Shell,
+  HeroPanel,
+  Badge,
+  StatusBar,
+  ResultsPanel,
+  RecipeGrid,
+  EmptyState,
+  Pagination,
+} from './components/App.styles';
 
-function App() {
-  const [searchTerm, setSearchTerm] = useState('pasta');
-  const [recipes, setRecipes] = useState([]);
-  const [selectedRecipe, setSelectedRecipe] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [page, setPage] = useState(1);
-  const [lastPage, setLastPage] = useState(1);
+function AppContent() {
+  const { state, searchRecipes } = useRecipes();
+  const { recipes, loading, error, page, lastPage } = state;
 
-  const loadRecipes = async (query, pageNumber = 1) => {
-    setError('');
-    setLoading(true);
-    try {
-      const response = await searchRecipes(query, pageNumber, 12);
-      setRecipes(response.data || []);
-      setPage(response.meta?.current_page || pageNumber);
-      setLastPage(response.meta?.last_page || 1);
-    } catch (fetchError) {
-      setRecipes([]);
-      setError(fetchError.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    loadRecipes('pasta', 1);
+    searchRecipes('pasta', 1);
   }, []);
-
-  const handleSearch = () => {
-    if (!searchTerm.trim()) return;
-    setSelectedRecipe(null);
-    loadRecipes(searchTerm.trim(), 1);
-  };
 
   const handlePageChange = (nextPage) => {
     if (nextPage < 1 || nextPage > lastPage) return;
-    loadRecipes(searchTerm.trim(), nextPage);
-  };
-
-  const handleSelectRecipe = async (recipe) => {
-    setError('');
-    setDetailLoading(true);
-    try {
-      const response = await getRecipeDetail(recipe.id);
-      setSelectedRecipe(response.data || recipe);
-    } catch (fetchError) {
-      setError(fetchError.message);
-    } finally {
-      setDetailLoading(false);
-    }
+    searchRecipes(state.searchTerm, nextPage);
   };
 
   return (
-    <div className="App">
-      <main className="App-shell">
-        <section className="hero-panel">
+    <AppContainer>
+      <Shell>
+        <HeroPanel>
           <div>
-            <span className="badge">MyRecipeHub</span>
+            <Badge>MyRecipeHub</Badge>
             <h1>Encontre receitas deliciosas em segundos</h1>
             <p>
-              Pesquise por pratos, ingredientes ou estilos e abra receitas completas com
-              ingredientes, instruções e informações nutricionais.
+              Pesquise por pratos, ingredientes ou estilos e abra receitas completas com detalhes do prato, ingredientes e instruções.
             </p>
           </div>
-          <SearchBar
-            searchTerm={searchTerm}
-            onSearchTermChange={setSearchTerm}
-            onSubmit={handleSearch}
-            loading={loading}
-          />
-          <div className="status-bar">
+          <SearchBar />
+          <StatusBar>
             {loading ? (
               <span>Carregando receitas...</span>
             ) : error ? (
@@ -85,22 +49,22 @@ function App() {
             ) : (
               <span>{recipes.length} receitas encontradas</span>
             )}
-          </div>
-        </section>
+          </StatusBar>
+        </HeroPanel>
 
-        <section className="results-panel">
+        <ResultsPanel>
           {recipes.length > 0 ? (
-            <div className="recipe-grid">
+            <RecipeGrid>
               {recipes.map((recipe) => (
-                <RecipeCard key={recipe.id} recipe={recipe} onSelect={handleSelectRecipe} />
+                <RecipeCard key={recipe.id} recipe={recipe} />
               ))}
-            </div>
+            </RecipeGrid>
           ) : (
-            !loading && !error && <p className="empty-state">Nenhuma receita encontrada. Tente outro termo.</p>
+            !loading && !error && <EmptyState>Nenhuma receita encontrada. Tente outro termo.</EmptyState>
           )}
 
           {lastPage > 1 && (
-            <div className="pagination">
+            <Pagination>
               <button onClick={() => handlePageChange(page - 1)} disabled={page <= 1 || loading}>
                 Anterior
               </button>
@@ -110,15 +74,21 @@ function App() {
               <button onClick={() => handlePageChange(page + 1)} disabled={page >= lastPage || loading}>
                 Próxima
               </button>
-            </div>
+            </Pagination>
           )}
-        </section>
-      </main>
+        </ResultsPanel>
+      </Shell>
 
-      {(selectedRecipe || detailLoading) && (
-        <RecipeDetails recipe={selectedRecipe} loading={detailLoading} onClose={() => setSelectedRecipe(null)} />
-      )}
-    </div>
+      <RecipeDetails />
+    </AppContainer>
+  );
+}
+
+function App() {
+  return (
+    <RecipeProvider>
+      <AppContent />
+    </RecipeProvider>
   );
 }
 

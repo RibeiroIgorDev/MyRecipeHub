@@ -1,70 +1,194 @@
-# Getting Started with Create React App
+# MyRecipeHub - Projeto 1: Programação Web Fullstack
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+## Descrição do Projeto
 
-## Available Scripts
+**MyRecipeHub** é uma aplicação web SPA (Single Page Application) desenvolvida em React.js que permite aos usuários buscar e visualizar receitas detalhadas a partir de uma API JSON externa. O projeto demonstra competências em desenvolvimento de frontend com React, consumo de APIs REST, gerenciamento de estado com Context API e implementação de hooks avançados.
 
-In the project directory, you can run:
+## Requisitos Atendidos
 
-### `npm start`
+### ✅ Arquitetura e Estrutura
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+- **SPA (Single Page Application)**: Aplicação desenvolvida em uma única página sem redirecionamentos
+- **Gerenciador de Projeto**: Create React App (CRA)
+- **Estrutura de Pastas**:
+  - `src/components/` - Componentes React em JSX
+  - `src/contexts/` - Context API para gerenciamento de estado
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+### ✅ API JSON
 
-### `npm test`
+- **API Utilizada**: [RecipeAPI](https://recipeapi.io/)
+- **Autenticação**: Bearer Token (sk_live_...)
+- **Endpoints Implementados**:
+  - `GET /api/v1/recipes?search=...&page=...&per_page=...` - Busca receitas
+  - `GET /api/v1/recipes/{id}` - Detalhe da receita
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+### ✅ Hook React Selecionado: useReducer
 
-### `npm run build`
+Implementado em `src/contexts/RecipeContext.js`:
+- **Motivo**: Excelente para gerenciar múltiplos estados relacionados (recipes, loading, error, page, searchTerm, etc.)
+- **Benefícios**: Lógica centralizada, fácil testabilidade, escalabilidade
+- **Ações Implementadas**:
+  - `SET_LOADING` - Estado de carregamento
+  - `SET_RECIPES` - Lista de receitas
+  - `SET_ERROR` - Mensagens de erro
+  - `SET_VALIDATION_ERROR` - Erros de validação
+  - `SET_SELECTED_RECIPE` - Receita selecionada para visualização de detalhes
+  - `SET_SEARCH_TERM` - Termo de busca
+  - `SET_PAGE` / `SET_PAGINATION` - Paginação
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### ✅ Biblioteca Externa: styled-components
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+- **Instalado via**: `npm install styled-components`
+- **Benefícios**: CSS-in-JS, componentização de estilos, sem conflitos de nomenclatura
+- **Arquivos**:
+  - `src/components/SearchBar.styles.js`
+  - `src/components/RecipeCard.styles.js`
+  - `src/components/RecipeDetails.styles.js`
+  - `src/components/App.styles.js`
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### ✅ Validação de Campos Obrigatórios
 
-### `npm run eject`
+- **Campo de Busca**: Validação de campo obrigatório
+- **Mensagem de Erro**: Exibição clara de erros de validação antes do envio
+- **Prevenção**: Submit desabilitado enquanto campo vazio
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+### ✅ Tratamento de Erros
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+- **Validação Anterior ao Envio**: Verificação de campo vazio
+- **Tratamento de Erros da API**: Captura e exibição de mensagens de erro
+- **Feedback ao Usuário**:
+  - Mensagens de erro em componente visual destacado
+  - Estados de carregamento
+  - Status de resultados encontrados
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+### ✅ Comunicação Entre Componentes
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+- **Context API**: Implementada em `RecipeContext.js`
+- **Provider Pattern**: `RecipeProvider` envolve a aplicação
+- **Hook Customizado**: `useRecipes()` para acesso ao contexto
+- **Componentes Comunicados**:
+  - `SearchBar` → emite ações de busca
+  - `RecipeCard` → dispara carregamento de detalhes
+  - `RecipeDetails` → exibe dados do contexto
 
-## Learn More
+### ✅ Busca com Parâmetros
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+- **Parâmetros Implementados**:
+  - `search` - Termo de busca (obrigatório)
+  - `page` - Número da página
+  - `per_page` - Itens por página (12)
+- **Paginação**: Navegação entre páginas de resultados
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+### ✅ Geração de Deployment
 
-### Code Splitting
+- **Build Production**: Comando `npm run build`
+- **Pasta Deploy**: `build/` pronta para deploy em servidor web
+- **Otimizações**:
+  - Minificação de JS/CSS
+  - Code splitting
+  - Tree shaking
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+## Estrutura de Pastas
 
-### Analyzing the Bundle Size
+```
+src/
+├── components/
+│   ├── App.js               # Componente principal (SPA)
+│   ├── App.styles.js        # Estilos do App (styled-components)
+│   ├── SearchBar.js         # Campo de busca com validação
+│   ├── SearchBar.styles.js
+│   ├── RecipeCard.js        # Card de receita (lista)
+│   ├── RecipeCard.styles.js
+│   ├── RecipeDetails.js     # Modal de detalhes da receita
+│   └── RecipeDetails.styles.js
+├── contexts/
+│   └── RecipeContext.js     # Context API com useReducer
+├── index.js                 # Ponto de entrada
+├── index.css                # Estilos globais
+└── App.test.js              # Testes
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+## Tecnologias Utilizadas
 
-### Making a Progressive Web App
+| Tecnologia | Versão | Uso |
+|-----------|--------|-----|
+| React | 19.2.6 | Framework principal |
+| styled-components | ^6.0 | Estilização CSS-in-JS |
+| React Hooks | Built-in | useReducer, useContext, useEffect, useCallback |
+| Context API | Built-in | Gerenciamento de estado global |
+| JavaScript | ES6+ | Linguagem base |
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+## Funcionalidades Principais
 
-### Advanced Configuration
+### 1. Busca de Receitas
+- Campo de entrada com validação
+- Mensagem de erro se campo vazio
+- Busca por termo (pratos, ingredientes, estilos)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+### 2. Listagem de Receitas
+- Grid responsivo (3 colunas → 2 → 1)
+- Cartões com imagem, nome e metadados
+- Paginação com navegação
 
-### Deployment
+### 3. Detalhes da Receita
+- Modal com informações completas
+- Ingredientes em lista
+- Instruções passo-a-passo
+- Informações nutricionais
+- Metadados (culinária, dieta, tipo de refeição, tempos)
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+### 4. Estados da Aplicação
+- Carregamento com feedback visual
+- Tratamento de erros da API
+- Estado vazio quando nenhum resultado
 
-### `npm run build` fails to minify
+## Como Executar
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+### Desenvolvimento
+
+```bash
+cd myrecipehub
+npm install
+npm start
+```
+
+A aplicação abrirá em `http://localhost:3000`
+
+### Build para Produção
+
+```bash
+npm run build
+```
+
+Gera pasta `build/` otimizada para deploy
+
+### Deploying
+
+```bash
+npm install -g serve
+serve -s build
+```
+
+## Variáveis de Ambiente
+
+Crie um arquivo `.env.local` na raiz do projeto:
+
+```env
+REACT_APP_RECIPE_API_KEY=sua_chave_aqui
+```
+
+## Padrões de Desenvolvimento
+
+- **Componentes Funcionais**: Uso exclusivo de hooks
+- **Separação de Responsabilidades**: Lógica em contexto, UI em componentes
+- **Props Drilling Evitado**: Context API centraliza estado
+- **Reutilização**: Componentes genéricos e reutilizáveis
+- **Responsive**: Mobile-first com media queries
+
+## Notas de Implementação
+
+1. **useReducer vs useState**: Escolhido para gerenciar múltiplos estados relacionados de forma previsível e centralizada
+2. **styled-components**: Proporciona estilos encapsulados e dinâmicos sem conflitos CSS
+3. **RecipeAPI Free Plan**: Limitado a 10 resultados por página e 500 requests/mês
+4. **Responsividade**: Implementada com grid CSS e media queries
+5. **Acessibilidade**: Uso de atributos aria e labels semânticos
