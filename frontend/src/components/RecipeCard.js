@@ -2,7 +2,6 @@ import { useRecipes } from '../contexts/RecipeContext';
 import {
   CardContainer,
   CardImage,
-  CardPlaceholder,
   CardContent,
   CardMeta,
 } from './RecipeCard.styles';
@@ -26,11 +25,11 @@ export default function RecipeCard({ recipe }) {
     getRecipeDetail(recipe.id);
   };
 
+  const imageUrl = getImage(recipe);
+
   return (
     <CardContainer onClick={handleClick}>
-      <CardImage src={getImage(recipe)}>
-        {!getImage(recipe) && <CardPlaceholder>Sem imagem</CardPlaceholder>}
-      </CardImage>
+      {imageUrl && <CardImage src={imageUrl} />}
       <CardContent>
         <h3>{recipe.name || 'Receita desconhecida'}</h3>
         {recipe.description && <p>{recipe.description}</p>}

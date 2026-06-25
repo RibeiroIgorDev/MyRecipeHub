@@ -57,7 +57,7 @@ export const CloseButton = styled.button`
 
 export const Header = styled.div`
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: ${({ hasImage }) => (hasImage ? '320px 1fr' : '1fr')};
   gap: 1.5rem;
   align-items: start;
 
@@ -83,6 +83,11 @@ export const Summary = styled.div`
     margin: 0 0 0.75rem;
     font-size: clamp(2rem, 2.5vw, 2.5rem);
     word-break: break-word;
+    padding-top: 1.75rem;
+
+    @media (max-width: 768px) {
+    padding-top: 0.025rem;
+  }
   }
 
   p {

@@ -10,7 +10,7 @@ const initialState = {
   selectedRecipe: null,
   loading: false,
   error: '',
-  searchTerm: 'pasta',
+  searchTerm: 'portuguese',
   page: 1,
   lastPage: 1,
   validationError: '',

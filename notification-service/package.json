@@ -1,0 +1,15 @@
+{
+  "name": "notification-service",
+  "version": "1.0.0",
+  "description": "Microserviço de notificações em tempo real via WebSocket",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node scripts/start.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.1",
+    "express": "^4.21.2",
+    "ws": "^8.1.0"
+  }
+}

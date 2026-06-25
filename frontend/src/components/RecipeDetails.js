@@ -14,7 +14,6 @@ import {
   NutritionGrid,
   NutritionItem,
 } from './RecipeDetails.styles';
-import { CardPlaceholder } from './RecipeCard.styles';
 
 const normalizeArray = (value) => {
   if (!value) return [];
@@ -57,6 +56,7 @@ export default function RecipeDetails() {
 
   if (!selectedRecipe) return null;
 
+  const imageUrl = getImage(selectedRecipe);
   const instructions = normalizeArray(selectedRecipe.instructions);
   const ingredients = Array.isArray(selectedRecipe.ingredients)
     ? selectedRecipe.ingredients
@@ -69,10 +69,8 @@ export default function RecipeDetails() {
         <CloseButton onClick={closeRecipeDetail} aria-label="Fechar detalhes">
           ×
         </CloseButton>
-        <Header>
-          <ImageContainer src={getImage(selectedRecipe)}>
-            {!getImage(selectedRecipe) && <CardPlaceholder>Sem imagem</CardPlaceholder>}
-          </ImageContainer>
+        <Header hasImage={Boolean(imageUrl)}>
+          {imageUrl && <ImageContainer src={imageUrl} />}
           <Summary>
             <h2>{selectedRecipe.name}</h2>
             {selectedRecipe.description && <p>{selectedRecipe.description}</p>}
@@ -80,9 +78,9 @@ export default function RecipeDetails() {
               {selectedRecipe.cuisine && <span>{selectedRecipe.cuisine}</span>}
               {selectedRecipe.diet && <span>{selectedRecipe.diet}</span>}
               {selectedRecipe.meal_type && <span>{selectedRecipe.meal_type}</span>}
-              {selectedRecipe.servings && <span>Rende {selectedRecipe.servings}</span>}
-              {selectedRecipe.prep_time && <span>Prep {selectedRecipe.prep_time} min</span>}
-              {selectedRecipe.cook_time && <span>Cook {selectedRecipe.cook_time} min</span>}
+              {selectedRecipe.servings && <span>Rende: {selectedRecipe.servings} porção(es)</span>}
+              {selectedRecipe.prep_time && <span>Tempo de preparo: {selectedRecipe.prep_time} min</span>}
+              {selectedRecipe.cook_time && <span>Tempo de cozimento: {selectedRecipe.cook_time} min</span>}
             </Tags>
           </Summary>
         </Header>
@@ -102,7 +100,7 @@ export default function RecipeDetails() {
           </section>
 
           <section>
-            <h3>Instruções</h3>
+            <h3>Modo de preparo</h3>
             {instructions.length > 0 ? (
               <ol>
                 {instructions.map((step, index) => (
@@ -116,7 +114,7 @@ export default function RecipeDetails() {
 
           {Object.keys(nutrition).length > 0 && (
             <section>
-              <h3>Informações Nutricionais</h3>
+              <h3>Informações nutricionais</h3>
               <NutritionGrid>
                 {Object.entries(nutrition).map(([key, value]) => (
                   <NutritionItem key={key}>

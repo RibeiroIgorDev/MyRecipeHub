@@ -1,0 +1,16 @@
+{
+  "name": "resource-service",
+  "version": "1.0.0",
+  "description": "Microserviço de recursos com CRUD, autenticação e eventos",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node scripts/start.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.1",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.0.5",
+    "jsonwebtoken": "^9.0.3"
+  }
+}
