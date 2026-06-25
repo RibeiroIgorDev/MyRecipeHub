@@ -26,7 +26,7 @@ export default function LoginForm({ onLogin, loading, error }) {
       <AuthCard>
         <Badge>MyRecipeHub</Badge>
         <Title>Autenticação</Title>
-        <Subtitle>Entre para acessar a busca e as operações protegidas do projeto.</Subtitle>
+        <Subtitle>Entre com suas credenciais para acessar o MyRecipeHub.</Subtitle>
         <Form onSubmit={handleSubmit}>
           <Field>
             <label htmlFor="username">Usuário</label>
@@ -36,7 +36,7 @@ export default function LoginForm({ onLogin, loading, error }) {
               autoComplete="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              placeholder="admin"
+              placeholder="Digite seu usuário"
             />
           </Field>
           <Field>
@@ -48,7 +48,7 @@ export default function LoginForm({ onLogin, loading, error }) {
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="admin123"
+              placeholder="Digite sua senha"
             />
           </Field>
           <Button type="submit" disabled={loading || !username.trim() || !password.trim()}>

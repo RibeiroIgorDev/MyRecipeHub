@@ -225,7 +225,7 @@ export default function ResourceManager({ authToken }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Falha ao salvar receita.');
 
-      setMessage(editingId ? 'Receita atualizado com sucesso.' : 'Receita criado com sucesso.');
+      setMessage(editingId ? 'Receita atualizada com sucesso.' : 'Receita criada com sucesso.');
       setForm(createInitialFormState());
       setEditingId(null);
       setFieldErrors({});
@@ -259,7 +259,7 @@ export default function ResourceManager({ authToken }) {
   };
 
   const handleDelete = async (resource) => {
-    if (!window.confirm(`Excluir o receita "${resource.title}"?`)) return;
+    if (!window.confirm(`Excluir a receita "${resource.title}"?`)) return;
     if (!authToken) return;
 
     setLoading(true);
@@ -276,7 +276,7 @@ export default function ResourceManager({ authToken }) {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Falha ao excluir receita.');
 
-      setMessage('Receita removido com sucesso.');
+      setMessage('Receita removida com sucesso.');
       loadResources();
     } catch (err) {
       setError(err.message || 'Falha ao excluir receita.');
