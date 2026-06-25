@@ -138,3 +138,8 @@ export const Notice = styled.p`
   background: ${(props) => (props.$variant === 'error' ? 'rgba(255, 127, 127, 0.16)' : 'rgba(74, 222, 128, 0.16)')};
   color: ${(props) => (props.$variant === 'error' ? '#ffb3b3' : '#bbf7d0')};
 `;
+
+export const FieldError = styled.span`
+  font-size: 0.8rem;
+  color: #ffb3b3;
+`;

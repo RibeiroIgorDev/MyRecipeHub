@@ -4,16 +4,17 @@ const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const http = require('http');
+const path = require('path');
+const { ObjectId } = require('mongodb');
+const { connectDB, getDB, closeDB } = require('./db');
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3003;
 const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004/events';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
-const resources = [];
-let nextId = 1;
 
 app.use(cors());
 app.use(express.json());
@@ -61,16 +62,84 @@ async function publishEvent(type, resource) {
   }
 }
 
+function parseListInput(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeInput(item)).filter(Boolean);
+  }
+
+  if (typeof value !== 'string') return [];
+  return value
+    .split(/\n|\r\n/)
+    .map((item) => sanitizeInput(item))
+    .filter(Boolean);
+}
+
+function parseNutritionInput(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return {};
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object') return parsed;
+    } catch {
+      // Fall through to plain-text parsing.
+    }
+
+    return trimmed
+      .split(/\n|;|,/)
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .reduce((accumulator, entry) => {
+        const separatorIndex = entry.search(/[:=]/);
+        if (separatorIndex === -1) return accumulator;
+
+        const key = entry.slice(0, separatorIndex).trim();
+        const rawValue = entry.slice(separatorIndex + 1).trim();
+        if (!key || !rawValue) return accumulator;
+
+        const numericValue = /^-?\d+(\.\d+)?$/.test(rawValue) ? Number(rawValue) : rawValue;
+        accumulator[key] = numericValue;
+        return accumulator;
+      }, {});
+  }
+  return {};
+}
+
 function validateResourcePayload(payload) {
   const title = sanitizeInput(payload?.title || '');
   const description = sanitizeInput(payload?.description || '');
-  const theme = sanitizeInput(payload?.theme || '');
+  const cuisine = sanitizeInput(payload?.cuisine || '');
+  const diet = sanitizeInput(payload?.diet || '');
+  const mealType = sanitizeInput(payload?.meal_type || '');
+  const prepTime = sanitizeInput(payload?.prep_time || '');
+  const cookTime = sanitizeInput(payload?.cook_time || '');
+  const servings = sanitizeInput(payload?.servings || '');
+  const image = sanitizeInput(payload?.image || '');
+  const ingredients = parseListInput(payload?.ingredients);
+  const instructions = parseListInput(payload?.instructions);
+  const nutrition = parseNutritionInput(payload?.nutrition);
 
-  if (!title || !description || !theme) {
-    return { error: 'title, description and theme are required.' };
+  if (!title || !description || !cuisine || !diet || !mealType || !prepTime || !cookTime || !servings || !image || ingredients.length === 0 || instructions.length === 0) {
+    return { error: 'All fields are required except nutrition.' };
   }
 
-  return { title, description, theme };
+  return {
+    title,
+    description,
+    cuisine,
+    diet,
+    meal_type: mealType,
+    prep_time: prepTime,
+    cook_time: cookTime,
+    servings,
+    image,
+    ingredients,
+    instructions,
+    nutrition,
+  };
 }
 
 app.get('/', (req, res) => {
@@ -85,85 +154,173 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'resource-service' });
 });
 
-app.get('/resources', authenticateToken, (req, res) => {
-  const query = sanitizeInput(req.query?.q || '');
-  const theme = sanitizeInput(req.query?.theme || '');
-  const ownerId = req.user?.sub;
+app.get('/resources', authenticateToken, async (req, res) => {
+  try {
+    const query = sanitizeInput(req.query?.q || '');
+    const ownerId = req.user?.sub;
+    const db = getDB();
+    const resourcesCollection = db.collection('resources');
 
-  const filtered = resources.filter((resource) => {
-    const belongsToUser = resource.ownerId === ownerId;
-    const matchesQuery = !query || resource.title.toLowerCase().includes(query.toLowerCase()) || resource.description.toLowerCase().includes(query.toLowerCase());
-    const matchesTheme = !theme || resource.theme.toLowerCase() === theme.toLowerCase();
-    return belongsToUser && matchesQuery && matchesTheme;
-  });
+    let filter = { owner: ownerId };
+    if (query) {
+      filter.$or = [
+        { title: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } },
+      ];
+    }
 
-  res.json({ data: filtered });
+    const resources = await resourcesCollection.find(filter).toArray();
+    res.json({ data: resources });
+  } catch (error) {
+    console.error('[resource] error fetching resources:', error);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+app.get('/resources/:id', authenticateToken, async (req, res) => {
+  try {
+    const db = getDB();
+    const resourcesCollection = db.collection('resources');
+    const resource = await resourcesCollection.findOne({ _id: new ObjectId(req.params.id) });
+
+    if (!resource) {
+      return res.status(404).json({ error: 'Resource not found.' });
+    }
+
+    if (resource.owner !== req.user.sub) {
+      return res.status(403).json({ error: 'Forbidden.' });
+    }
+
+    res.json({ data: resource });
+  } catch (error) {
+    console.error('[resource] error fetching resource:', error);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
 });
 
 app.post('/resources', authenticateToken, writeLimiter, async (req, res) => {
-  const validation = validateResourcePayload(req.body);
-  if (validation.error) {
-    return res.status(400).json({ error: validation.error });
+  try {
+    const validation = validateResourcePayload(req.body);
+    if (validation.error) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const db = getDB();
+    const resourcesCollection = db.collection('resources');
+
+    const resource = {
+      title: validation.title,
+      description: validation.description,
+      cuisine: validation.cuisine,
+      diet: validation.diet,
+      meal_type: validation.meal_type,
+      prep_time: validation.prep_time,
+      cook_time: validation.cook_time,
+      servings: validation.servings,
+      image: validation.image,
+      ingredients: validation.ingredients,
+      instructions: validation.instructions,
+      nutrition: validation.nutrition,
+      owner: req.user.sub,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const result = await resourcesCollection.insertOne(resource);
+    const createdResource = { _id: result.insertedId, ...resource };
+    await publishEvent('created', createdResource);
+    console.log(`[resource] created id=${result.insertedId} by=${req.user.username}`);
+    res.status(201).json({ data: createdResource, event: 'created' });
+  } catch (error) {
+    console.error('[resource] error creating resource:', error);
+    res.status(500).json({ error: 'Internal server error.' });
   }
-
-  const resource = {
-    id: nextId++,
-    title: validation.title,
-    description: validation.description,
-    theme: validation.theme,
-    ownerId: req.user.sub,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-
-  resources.push(resource);
-  await publishEvent('created', resource);
-  console.log(`[resource] created id=${resource.id} by=${req.user.username}`);
-  res.status(201).json({ data: resource, event: 'created' });
 });
 
 app.put('/resources/:id', authenticateToken, writeLimiter, async (req, res) => {
-  const resource = resources.find((item) => item.id === Number(req.params.id));
-  if (!resource) {
-    return res.status(404).json({ error: 'Resource not found.' });
+  try {
+    const db = getDB();
+    const resourcesCollection = db.collection('resources');
+    const resource = await resourcesCollection.findOne({ _id: new ObjectId(req.params.id) });
+
+    if (!resource) {
+      return res.status(404).json({ error: 'Resource not found.' });
+    }
+
+    if (resource.owner !== req.user.sub) {
+      return res.status(403).json({ error: 'Forbidden.' });
+    }
+
+    const validation = validateResourcePayload(req.body);
+    if (validation.error) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const update = {
+      title: validation.title,
+      description: validation.description,
+      cuisine: validation.cuisine,
+      diet: validation.diet,
+      meal_type: validation.meal_type,
+      prep_time: validation.prep_time,
+      cook_time: validation.cook_time,
+      servings: validation.servings,
+      image: validation.image,
+      ingredients: validation.ingredients,
+      instructions: validation.instructions,
+      nutrition: validation.nutrition,
+      updatedAt: new Date(),
+    };
+
+    await resourcesCollection.updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
+    const updatedResource = { ...resource, ...update };
+    await publishEvent('updated', updatedResource);
+    console.log(`[resource] updated id=${req.params.id} by=${req.user.username}`);
+    res.json({ data: updatedResource, event: 'updated' });
+  } catch (error) {
+    console.error('[resource] error updating resource:', error);
+    res.status(500).json({ error: 'Internal server error.' });
   }
-
-  if (resource.ownerId !== req.user.sub) {
-    return res.status(403).json({ error: 'Forbidden.' });
-  }
-
-  const validation = validateResourcePayload(req.body);
-  if (validation.error) {
-    return res.status(400).json({ error: validation.error });
-  }
-
-  resource.title = validation.title;
-  resource.description = validation.description;
-  resource.theme = validation.theme;
-  resource.updatedAt = new Date().toISOString();
-
-  await publishEvent('updated', resource);
-  console.log(`[resource] updated id=${resource.id} by=${req.user.username}`);
-  res.json({ data: resource, event: 'updated' });
 });
 
 app.delete('/resources/:id', authenticateToken, writeLimiter, async (req, res) => {
-  const index = resources.findIndex((item) => item.id === Number(req.params.id));
-  if (index === -1) {
-    return res.status(404).json({ error: 'Resource not found.' });
-  }
+  try {
+    const db = getDB();
+    const resourcesCollection = db.collection('resources');
+    const resource = await resourcesCollection.findOne({ _id: new ObjectId(req.params.id) });
 
-  const resource = resources[index];
-  if (resource.ownerId !== req.user.sub) {
-    return res.status(403).json({ error: 'Forbidden.' });
-  }
+    if (!resource) {
+      return res.status(404).json({ error: 'Resource not found.' });
+    }
 
-  resources.splice(index, 1);
-  await publishEvent('deleted', resource);
-  console.log(`[resource] deleted id=${resource.id} by=${req.user.username}`);
-  res.json({ data: resource, event: 'deleted' });
+    if (resource.owner !== req.user.sub) {
+      return res.status(403).json({ error: 'Forbidden.' });
+    }
+
+    await resourcesCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+    await publishEvent('deleted', resource);
+    console.log(`[resource] deleted id=${req.params.id} by=${req.user.username}`);
+    res.json({ data: resource, event: 'deleted' });
+  } catch (error) {
+    console.error('[resource] error deleting resource:', error);
+    res.status(500).json({ error: 'Internal server error.' });
+  }
 });
 
-server.listen(PORT, () => {
-  console.log(`[resource] service running on port ${PORT}`);
-});
+(async () => {
+  try {
+    await connectDB();
+    server.listen(PORT, () => {
+      console.log(`[resource] service running on port ${PORT}`);
+    });
+
+    process.on('SIGINT', async () => {
+      console.log('[resource] shutting down...');
+      await closeDB();
+      process.exit(0);
+    });
+  } catch (error) {
+    console.error('[resource] startup error:', error);
+    process.exit(1);
+  }
+})();

@@ -2,8 +2,7 @@ import React, { createContext, useReducer, useCallback } from 'react';
 
 export const RecipeContext = createContext();
 
-const API_KEY = process.env.REACT_APP_RECIPE_API_KEY;
-const BASE_URL = 'https://recipeapi.io/api/v1';
+const RESOURCE_SERVICE_URL = process.env.REACT_APP_RESOURCE_SERVICE_URL || 'http://localhost:3003';
 
 const initialState = {
   recipes: [],
@@ -53,30 +52,60 @@ function recipeReducer(state, action) {
   }
 }
 
-export function RecipeProvider({ children }) {
+function normalizeRecipe(resource) {
+  const title = resource?.title || resource?.name || 'Receita sem título';
+  const description = resource?.description || resource?.summary || 'Descrição não informada.';
+
+  return {
+    id: resource?._id || resource?.id,
+    name: title,
+    description,
+    cuisine: resource?.cuisine || '',
+    diet: resource?.diet || '',
+    meal_type: resource?.meal_type || '',
+    prep_time: resource?.prep_time || null,
+    cook_time: resource?.cook_time || null,
+    servings: resource?.servings || null,
+    ingredients: Array.isArray(resource?.ingredients)
+      ? resource.ingredients
+      : resource?.ingredients
+        ? [resource.ingredients]
+        : [],
+    instructions: Array.isArray(resource?.instructions)
+      ? resource.instructions
+      : resource?.instructions
+        ? [resource.instructions]
+        : [description],
+    nutrition: resource?.nutrition || {},
+    image: resource?.image || resource?.photo || '',
+    raw: resource,
+  };
+}
+
+export function RecipeProvider({ children, authToken }) {
   const [state, dispatch] = useReducer(recipeReducer, initialState);
 
   const getAuthHeaders = useCallback(() => {
-    if (!API_KEY) {
-      throw new Error('Chave de API ausente. Configure REACT_APP_RECIPE_API_KEY em .env.local');
+    if (!authToken) {
+      throw new Error('É necessário estar autenticado para consultar receitas.');
     }
+
     return {
-      Authorization: `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${authToken}`,
       'Content-Type': 'application/json',
     };
-  }, []);
+  }, [authToken]);
 
   const handleApiResponse = useCallback(async (response) => {
     const data = await response.json();
     if (!response.ok) {
-      const message = data?.error?.message || 'Falha ao buscar dados da API.';
+      const message = data?.error || 'Falha ao buscar dados no backend local.';
       throw new Error(message);
     }
     return data;
   }, []);
 
   const searchRecipes = useCallback(async (query, pageNumber = 1) => {
-    // Validação de campo obrigatório
     if (!query || !query.trim()) {
       dispatch({ type: actionTypes.SET_VALIDATION_ERROR, payload: 'Campo de busca é obrigatório.' });
       return;
@@ -87,24 +116,20 @@ export function RecipeProvider({ children }) {
     dispatch({ type: actionTypes.SET_ERROR, payload: '' });
 
     try {
-      const params = new URLSearchParams({
-        search: query.trim(),
-        page: String(pageNumber),
-        per_page: '12',
-      });
-
-      const response = await fetch(`${BASE_URL}/recipes?${params.toString()}`, {
+      const response = await fetch(`${RESOURCE_SERVICE_URL}/resources?q=${encodeURIComponent(query.trim())}`, {
         method: 'GET',
         headers: getAuthHeaders(),
       });
 
       const result = await handleApiResponse(response);
-      dispatch({ type: actionTypes.SET_RECIPES, payload: result.data || [] });
+      const recipes = Array.isArray(result.data) ? result.data.map(normalizeRecipe) : [];
+
+      dispatch({ type: actionTypes.SET_RECIPES, payload: recipes });
       dispatch({
         type: actionTypes.SET_PAGINATION,
         payload: {
-          page: result.meta?.current_page || pageNumber,
-          lastPage: result.meta?.last_page || 1,
+          page: pageNumber,
+          lastPage: 1,
         },
       });
     } catch (error) {
@@ -120,13 +145,13 @@ export function RecipeProvider({ children }) {
     dispatch({ type: actionTypes.SET_ERROR, payload: '' });
 
     try {
-      const response = await fetch(`${BASE_URL}/recipes/${recipeId}`, {
+      const response = await fetch(`${RESOURCE_SERVICE_URL}/resources/${recipeId}`, {
         method: 'GET',
         headers: getAuthHeaders(),
       });
 
       const result = await handleApiResponse(response);
-      dispatch({ type: actionTypes.SET_SELECTED_RECIPE, payload: result.data });
+      dispatch({ type: actionTypes.SET_SELECTED_RECIPE, payload: normalizeRecipe(result.data) });
     } catch (error) {
       dispatch({ type: actionTypes.SET_ERROR, payload: error.message });
     } finally {

@@ -1,11 +1,15 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
+const { ObjectId } = require('mongodb');
 
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
+const { connectDB, getDB, closeDB } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -14,9 +18,6 @@ const JWT_TTL = process.env.JWT_TTL || '15m';
 
 app.use(cors());
 app.use(express.json());
-
-const revokedTokens = new Set();
-const users = [];
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -32,22 +33,28 @@ function sanitizeInput(value) {
 }
 
 async function seedUsers() {
+  const db = getDB();
+  const usersCollection = db.collection('users');
   const defaults = [
     { username: 'admin', password: 'admin123', role: 'admin' },
     { username: 'demo', password: 'demo123', role: 'user' },
   ];
 
   for (const user of defaults) {
-    users.push({
-      id: user.username,
-      username: user.username,
-      passwordHash: await bcrypt.hash(user.password, 10),
-      role: user.role,
-    });
+    const existing = await usersCollection.findOne({ username: user.username });
+    if (!existing) {
+      await usersCollection.insertOne({
+        username: user.username,
+        email: `${user.username}@example.com`,
+        passwordHash: await bcrypt.hash(user.password, 10),
+        role: user.role,
+        createdAt: new Date(),
+      });
+    }
   }
 }
 
-function authenticateToken(req, res, next) {
+async function authenticateToken(req, res, next) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
@@ -55,8 +62,15 @@ function authenticateToken(req, res, next) {
     return res.status(401).json({ error: 'Authentication required.' });
   }
 
-  if (revokedTokens.has(token)) {
-    return res.status(401).json({ error: 'Token revoked.' });
+  try {
+    const db = getDB();
+    const revokedTokensCollection = db.collection('revoked_tokens');
+    const isRevoked = await revokedTokensCollection.findOne({ token });
+    if (isRevoked) {
+      return res.status(401).json({ error: 'Token revoked.' });
+    }
+  } catch (err) {
+    console.error('[auth] error checking revoked tokens:', err);
   }
 
   jwt.verify(token, JWT_SECRET, (err, payload) => {
@@ -89,56 +103,84 @@ app.post('/login', loginLimiter, async (req, res) => {
     return res.status(400).json({ error: 'username and password are required.' });
   }
 
-  const user = users.find((item) => item.username === username.toLowerCase());
+  try {
+    const db = getDB();
+    const usersCollection = db.collection('users');
+    const user = await usersCollection.findOne({ username: username.toLowerCase() });
 
-  if (!user) {
-    console.log(`[auth] failed login for username=${username}`);
-    return res.status(401).json({ error: 'Invalid credentials.' });
+    if (!user) {
+      console.log(`[auth] failed login for username=${username}`);
+      return res.status(401).json({ error: 'Invalid credentials.' });
+    }
+
+    const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+    if (!isValidPassword) {
+      console.log(`[auth] failed login for username=${username}`);
+      return res.status(401).json({ error: 'Invalid credentials.' });
+    }
+
+    const token = jwt.sign(
+      { sub: user._id.toString(), username: user.username, role: user.role },
+      JWT_SECRET,
+      { expiresIn: JWT_TTL }
+    );
+
+    console.log(`[auth] success login username=${user.username}`);
+    res.json({
+      message: 'Login successful.',
+      token,
+      expiresIn: JWT_TTL,
+      user: { id: user._id.toString(), username: user.username, role: user.role },
+    });
+  } catch (error) {
+    console.error('[auth] login error:', error);
+    res.status(500).json({ error: 'Internal server error.' });
   }
-
-  const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-  if (!isValidPassword) {
-    console.log(`[auth] failed login for username=${username}`);
-    return res.status(401).json({ error: 'Invalid credentials.' });
-  }
-
-  const token = jwt.sign(
-    { sub: user.id, username: user.username, role: user.role },
-    JWT_SECRET,
-    { expiresIn: JWT_TTL }
-  );
-
-  console.log(`[auth] success login username=${user.username}`);
-  res.json({
-    message: 'Login successful.',
-    token,
-    expiresIn: JWT_TTL,
-    user: { id: user.id, username: user.username, role: user.role },
-  });
 });
 
-app.post('/logout', authenticateToken, (req, res) => {
+app.post('/logout', authenticateToken, async (req, res) => {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
   if (token) {
-    revokedTokens.add(token);
+    try {
+      const db = getDB();
+      const revokedTokensCollection = db.collection('revoked_tokens');
+      const decoded = jwt.decode(token);
+      await revokedTokensCollection.insertOne({
+        token,
+        revokedAt: new Date(),
+        expiresAt: new Date(decoded.exp * 1000),
+      });
+    } catch (error) {
+      console.error('[auth] logout error:', error);
+    }
   }
 
   console.log(`[auth] logout user=${req.user.username}`);
   res.json({ message: 'Logout successful.' });
 });
 
-app.get('/me', authenticateToken, (req, res) => {
+app.get('/me', authenticateToken, async (req, res) => {
   res.json({ user: { id: req.user.sub, username: req.user.username, role: req.user.role } });
 });
 
-seedUsers().then(() => {
-  app.listen(PORT, () => {
-    console.log(`[auth] service running on port ${PORT}`);
-    console.log('[auth] seeded demo users: admin/admin123 and demo/demo123');
-  });
-}).catch((error) => {
-  console.error('[auth] failed to seed users', error);
-  process.exit(1);
-});
+(async () => {
+  try {
+    await connectDB();
+    await seedUsers();
+    app.listen(PORT, () => {
+      console.log(`[auth] service running on port ${PORT}`);
+      console.log('[auth] seeded demo users: admin/admin123 and demo/demo123');
+    });
+
+    process.on('SIGINT', async () => {
+      console.log('[auth] shutting down...');
+      await closeDB();
+      process.exit(0);
+    });
+  } catch (error) {
+    console.error('[auth] startup error:', error);
+    process.exit(1);
+  }
+})();
