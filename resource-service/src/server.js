@@ -135,9 +135,36 @@ function validateResourcePayload(payload) {
   const ingredients = parseListInput(payload?.ingredients);
   const instructions = parseListInput(payload?.instructions);
   const nutrition = parseNutritionInput(payload?.nutrition);
+  const prepTimeNumber = Number(prepTime);
+  const cookTimeNumber = Number(cookTime);
+  const servingsNumber = Number(servings);
 
   if (!title || !description || !cuisine || !diet || !mealType || !prepTime || !cookTime || !servings || !image || ingredients.length === 0 || instructions.length === 0) {
     return { error: 'All fields are required except nutrition.' };
+  }
+
+  if (title.length < 3) {
+    return { error: 'title must contain at least 3 characters.' };
+  }
+
+  if (description.length < 10) {
+    return { error: 'description must contain at least 10 characters.' };
+  }
+
+  if (!/^https?:\/\/.+/.test(image)) {
+    return { error: 'image must be a valid URL starting with http:// or https://.' };
+  }
+
+  if (!Number.isInteger(prepTimeNumber) || prepTimeNumber <= 0) {
+    return { error: 'prep_time must be a positive integer.' };
+  }
+
+  if (!Number.isInteger(cookTimeNumber) || cookTimeNumber <= 0) {
+    return { error: 'cook_time must be a positive integer.' };
+  }
+
+  if (!Number.isInteger(servingsNumber) || servingsNumber <= 0) {
+    return { error: 'servings must be a positive integer.' };
   }
 
   return {
@@ -354,6 +381,16 @@ app.delete('/resources/:id', authenticateToken, writeLimiter, async (req, res) =
     console.error('[resource] error deleting resource:', error);
     res.status(500).json({ error: 'Internal server error.' });
   }
+});
+
+app.all('/resources', (req, res) => {
+  res.set('Allow', 'GET, POST');
+  res.status(405).json({ error: `Method ${req.method} not allowed on /resources.` });
+});
+
+app.all('/resources/:id', (req, res) => {
+  res.set('Allow', 'GET, PUT, PATCH, DELETE');
+  res.status(405).json({ error: `Method ${req.method} not allowed on /resources/:id.` });
 });
 
 (async () => {

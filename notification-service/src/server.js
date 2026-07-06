@@ -44,6 +44,27 @@ function broadcast(event) {
   }
 }
 
+function sanitizeInput(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim().replace(/[<>]/g, '');
+}
+
+function validateEventPayload(payload) {
+  const type = sanitizeInput(payload?.type || '');
+  if (!type) {
+    return { error: 'type is required.' };
+  }
+
+  if (type.length < 3) {
+    return { error: 'type must contain at least 3 characters.' };
+  }
+
+  return {
+    type,
+    payload: payload?.payload ?? payload?.resource ?? null,
+  };
+}
+
 function enqueueEvent(event) {
   if (eventQueue.length >= MAX_QUEUE_SIZE) {
     eventQueue.shift();
@@ -97,25 +118,35 @@ app.get('/events/queue', (req, res) => {
 });
 
 app.post('/events/queue', (req, res) => {
-  const event = req.body;
-  if (!event?.type) {
-    return res.status(400).json({ error: 'type is required.' });
+  const validation = validateEventPayload(req.body);
+  if (validation.error) {
+    return res.status(400).json({ error: validation.error });
   }
 
-  console.log(`[notification] event queued: ${event.type}`);
-  enqueueEvent(event);
+  console.log(`[notification] event queued: ${validation.type}`);
+  enqueueEvent(validation);
   res.status(202).json({ status: 'queued' });
 });
 
 app.post('/events', (req, res) => {
-  const event = req.body;
-  if (!event?.type) {
-    return res.status(400).json({ error: 'type is required.' });
+  const validation = validateEventPayload(req.body);
+  if (validation.error) {
+    return res.status(400).json({ error: validation.error });
   }
 
-  console.log(`[notification] event received: ${event.type}`);
-  enqueueEvent(event);
+  console.log(`[notification] event received: ${validation.type}`);
+  enqueueEvent(validation);
   res.status(202).json({ status: 'queued' });
+});
+
+app.all('/events', (req, res) => {
+  res.set('Allow', 'POST');
+  res.status(405).json({ error: `Method ${req.method} not allowed on /events.` });
+});
+
+app.all('/events/queue', (req, res) => {
+  res.set('Allow', 'GET, POST');
+  res.status(405).json({ error: `Method ${req.method} not allowed on /events/queue.` });
 });
 
 server.listen(PORT, () => {

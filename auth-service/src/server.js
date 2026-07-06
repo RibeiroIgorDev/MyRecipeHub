@@ -33,6 +33,25 @@ function sanitizeInput(value) {
   return value.trim().replace(/[<>]/g, '');
 }
 
+function validateLoginPayload(payload) {
+  const username = sanitizeInput(payload?.username || '').toLowerCase();
+  const password = String(payload?.password || '');
+
+  if (!username || !password) {
+    return { error: 'username and password are required.' };
+  }
+
+  if (username.length < 3) {
+    return { error: 'username must contain at least 3 characters.' };
+  }
+
+  if (password.length < 6) {
+    return { error: 'password must contain at least 6 characters.' };
+  }
+
+  return { username, password };
+}
+
 async function publishEvent(type, payload) {
   try {
     await fetch(NOTIFICATION_SERVICE_URL, {
@@ -109,12 +128,12 @@ app.get('/health', (req, res) => {
 });
 
 app.post('/login', loginLimiter, async (req, res) => {
-  const username = sanitizeInput(req.body?.username || '');
-  const password = String(req.body?.password || '');
-
-  if (!username || !password) {
-    return res.status(400).json({ error: 'username and password are required.' });
+  const validation = validateLoginPayload(req.body);
+  if (validation.error) {
+    return res.status(400).json({ error: validation.error });
   }
+
+  const { username, password } = validation;
 
   try {
     const db = getDB();
@@ -194,6 +213,21 @@ app.post('/logout', authenticateToken, async (req, res) => {
     at: new Date().toISOString(),
   });
   res.json({ message: 'Logout successful.' });
+});
+
+app.all('/login', (req, res) => {
+  res.set('Allow', 'POST');
+  res.status(405).json({ error: `Method ${req.method} not allowed on /login.` });
+});
+
+app.all('/logout', (req, res) => {
+  res.set('Allow', 'POST');
+  res.status(405).json({ error: `Method ${req.method} not allowed on /logout.` });
+});
+
+app.all('/me', (req, res) => {
+  res.set('Allow', 'GET');
+  res.status(405).json({ error: `Method ${req.method} not allowed on /me.` });
 });
 
 app.get('/me', authenticateToken, async (req, res) => {
