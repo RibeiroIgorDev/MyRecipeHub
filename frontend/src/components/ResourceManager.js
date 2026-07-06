@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ResourcePanel,
   ResourceHeader,
@@ -12,6 +12,10 @@ import {
   ResourceMeta,
   ResourceActions,
   ActionButton,
+  SearchToolbar,
+  SearchField,
+  SearchInput,
+  SearchSummary,
   Notice,
   FieldError,
 } from './ResourceManager.styles';
@@ -103,12 +107,43 @@ const parseList = (value) => {
 
 export default function ResourceManager({ authToken }) {
   const [resources, setResources] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [form, setForm] = useState(createInitialFormState);
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
+
+  const filteredResources = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    if (!normalizedSearch) return resources;
+
+    return resources.filter((resource) => {
+      const nutritionText = resource.nutrition && typeof resource.nutrition === 'object'
+        ? Object.entries(resource.nutrition).map(([key, value]) => `${key} ${value}`).join(' ')
+        : '';
+
+      const searchableText = [
+        resource.title,
+        resource.description,
+        resource.cuisine,
+        resource.diet,
+        resource.meal_type,
+        resource.prep_time,
+        resource.cook_time,
+        resource.servings,
+        resource.ingredients?.join(' '),
+        resource.instructions?.join(' '),
+        nutritionText,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return searchableText.includes(normalizedSearch);
+    });
+  }, [resources, searchTerm]);
 
   const handleNumericChange = (field) => (event) => {
     const value = event.target.value.replace(/[^0-9]/g, '');
@@ -466,8 +501,32 @@ export default function ResourceManager({ authToken }) {
 
       {loading && <Notice $variant="success">Carregando receitas...</Notice>}
 
+      <SearchToolbar>
+        <SearchField>
+          <label htmlFor="resource-search">Buscar itens</label>
+          <SearchInput
+            id="resource-search"
+            type="search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Busque por título, descrição, ingrediente, dieta..."
+          />
+        </SearchField>
+        <ResourceButton
+          type="button"
+          onClick={() => setSearchTerm('')}
+          disabled={!searchTerm.trim()}
+        >
+          Limpar busca
+        </ResourceButton>
+      </SearchToolbar>
+
+      <SearchSummary>
+        Exibindo {filteredResources.length} de {resources.length} receitas.
+      </SearchSummary>
+
       <ResourceList>
-        {resources.map((resource) => (
+        {filteredResources.map((resource) => (
           <ResourceItem key={resource._id}>
             <strong>{resource.title}</strong>
             <p>{resource.description}</p>
@@ -496,6 +555,16 @@ export default function ResourceManager({ authToken }) {
             </ResourceMeta>
           </ResourceItem>
         ))}
+        {!loading && resources.length === 0 && (
+          <ResourceItem>
+            <p>Nenhuma receita cadastrada até o momento.</p>
+          </ResourceItem>
+        )}
+        {!loading && resources.length > 0 && filteredResources.length === 0 && (
+          <ResourceItem>
+            <p>Nenhuma receita encontrada para "{searchTerm.trim()}".</p>
+          </ResourceItem>
+        )}
       </ResourceList>
     </ResourcePanel>
   );

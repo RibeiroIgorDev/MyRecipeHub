@@ -94,6 +94,49 @@ export const ResourceButton = styled.button`
   }
 `;
 
+export const SearchToolbar = styled.div`
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+  margin: 0 0 0.85rem;
+
+  @media (max-width: 760px) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+`;
+
+export const SearchField = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1;
+
+  label {
+    font-size: 0.95rem;
+    color: rgba(248, 250, 252, 0.82);
+  }
+`;
+
+export const SearchInput = styled.input`
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 0.8rem 0.95rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+
+  &:focus {
+    outline: 2px solid rgba(255, 109, 36, 0.45);
+    outline-offset: 1px;
+  }
+`;
+
+export const SearchSummary = styled.p`
+  margin: 0 0 0.9rem;
+  color: rgba(248, 250, 252, 0.72);
+  font-size: 0.92rem;
+`;
+
 export const ResourceList = styled.ul`
   list-style: none;
   padding: 0;
