@@ -80,7 +80,7 @@ app.get('/', (req, res) => {
   res.json({
     status: 'ok',
     service: 'notification-service',
-    endpoints: ['/health', '/events'],
+    endpoints: ['/health', '/events', '/events/queue'],
   });
 });
 

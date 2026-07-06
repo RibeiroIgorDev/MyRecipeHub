@@ -15,6 +15,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const JWT_TTL = process.env.JWT_TTL || '15m';
+const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004/events/queue';
 
 app.use(cors());
 app.use(express.json());
@@ -30,6 +31,18 @@ const loginLimiter = rateLimit({
 function sanitizeInput(value) {
   if (typeof value !== 'string') return '';
   return value.trim().replace(/[<>]/g, '');
+}
+
+async function publishEvent(type, payload) {
+  try {
+    await fetch(NOTIFICATION_SERVICE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, payload }),
+    });
+  } catch (error) {
+    console.error(`[auth] failed to publish event ${type}:`, error);
+  }
 }
 
 async function seedUsers() {
@@ -110,12 +123,22 @@ app.post('/login', loginLimiter, async (req, res) => {
 
     if (!user) {
       console.log(`[auth] failed login for username=${username}`);
+      await publishEvent('auth.login.failed', {
+        username,
+        reason: 'invalid_credentials',
+        at: new Date().toISOString(),
+      });
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
       console.log(`[auth] failed login for username=${username}`);
+      await publishEvent('auth.login.failed', {
+        username,
+        reason: 'invalid_credentials',
+        at: new Date().toISOString(),
+      });
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
@@ -126,6 +149,12 @@ app.post('/login', loginLimiter, async (req, res) => {
     );
 
     console.log(`[auth] success login username=${user.username}`);
+    await publishEvent('auth.login.succeeded', {
+      userId: user._id.toString(),
+      username: user.username,
+      role: user.role,
+      at: new Date().toISOString(),
+    });
     res.json({
       message: 'Login successful.',
       token,
@@ -158,6 +187,12 @@ app.post('/logout', authenticateToken, async (req, res) => {
   }
 
   console.log(`[auth] logout user=${req.user.username}`);
+  await publishEvent('auth.logout.succeeded', {
+    userId: req.user.sub,
+    username: req.user.username,
+    role: req.user.role,
+    at: new Date().toISOString(),
+  });
   res.json({ message: 'Logout successful.' });
 });
 

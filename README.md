@@ -63,5 +63,6 @@ npm start
 
 ## Eventos e fila de mensagens
 - O resource-service publica eventos de CRUD no notification-service ao final da operação.
+- O auth-service publica eventos de autenticação (login/logout) no notification-service.
 - Endpoint de enfileiramento: POST /events/queue
 - Endpoint de status da fila: GET /events/queue
