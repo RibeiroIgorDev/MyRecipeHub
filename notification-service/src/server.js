@@ -9,11 +9,14 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3004;
+const MAX_QUEUE_SIZE = Number(process.env.EVENT_QUEUE_MAX_SIZE || 1000);
 
 app.use(cors());
 app.use(express.json());
 
 const clients = new Set();
+const eventQueue = [];
+let processingQueue = false;
 
 const wss = new WebSocketServer({ server });
 
@@ -41,6 +44,38 @@ function broadcast(event) {
   }
 }
 
+function enqueueEvent(event) {
+  if (eventQueue.length >= MAX_QUEUE_SIZE) {
+    eventQueue.shift();
+  }
+
+  eventQueue.push({
+    ...event,
+    queuedAt: new Date().toISOString(),
+  });
+
+  processQueue();
+}
+
+function processQueue() {
+  if (processingQueue) return;
+  processingQueue = true;
+
+  setImmediate(() => {
+    try {
+      while (eventQueue.length > 0) {
+        const event = eventQueue.shift();
+        broadcast(event);
+      }
+    } finally {
+      processingQueue = false;
+      if (eventQueue.length > 0) {
+        processQueue();
+      }
+    }
+  });
+}
+
 app.get('/', (req, res) => {
   res.json({
     status: 'ok',
@@ -53,6 +88,25 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'notification-service' });
 });
 
+app.get('/events/queue', (req, res) => {
+  res.json({
+    status: 'ok',
+    queueSize: eventQueue.length,
+    maxQueueSize: MAX_QUEUE_SIZE,
+  });
+});
+
+app.post('/events/queue', (req, res) => {
+  const event = req.body;
+  if (!event?.type) {
+    return res.status(400).json({ error: 'type is required.' });
+  }
+
+  console.log(`[notification] event queued: ${event.type}`);
+  enqueueEvent(event);
+  res.status(202).json({ status: 'queued' });
+});
+
 app.post('/events', (req, res) => {
   const event = req.body;
   if (!event?.type) {
@@ -60,8 +114,8 @@ app.post('/events', (req, res) => {
   }
 
   console.log(`[notification] event received: ${event.type}`);
-  broadcast(event);
-  res.json({ status: 'ok' });
+  enqueueEvent(event);
+  res.status(202).json({ status: 'queued' });
 });
 
 server.listen(PORT, () => {

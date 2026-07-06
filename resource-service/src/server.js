@@ -13,7 +13,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3003;
-const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004/events';
+const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004/events/queue';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
 app.use(cors());
@@ -30,6 +30,20 @@ const writeLimiter = rateLimit({
 function sanitizeInput(value) {
   if (typeof value !== 'string') return '';
   return value.trim().replace(/[<>]/g, '');
+}
+
+function sanitizeUnknownValue(value) {
+  if (typeof value === 'string') return sanitizeInput(value);
+  if (Array.isArray(value)) return value.map((item) => sanitizeUnknownValue(item));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).reduce((accumulator, [key, entryValue]) => {
+      const sanitizedKey = sanitizeInput(key);
+      if (!sanitizedKey) return accumulator;
+      accumulator[sanitizedKey] = sanitizeUnknownValue(entryValue);
+      return accumulator;
+    }, {});
+  }
+  return value;
 }
 
 function authenticateToken(req, res, next) {
@@ -76,14 +90,14 @@ function parseListInput(value) {
 
 function parseNutritionInput(value) {
   if (!value) return {};
-  if (typeof value === 'object') return value;
+  if (typeof value === 'object') return sanitizeUnknownValue(value);
   if (typeof value === 'string') {
     const trimmed = value.trim();
     if (!trimmed) return {};
 
     try {
       const parsed = JSON.parse(trimmed);
-      if (parsed && typeof parsed === 'object') return parsed;
+      if (parsed && typeof parsed === 'object') return sanitizeUnknownValue(parsed);
     } catch {
       // Fall through to plain-text parsing.
     }
@@ -140,6 +154,83 @@ function validateResourcePayload(payload) {
     instructions,
     nutrition,
   };
+}
+
+async function getOwnedResourceOrError(resourcesCollection, resourceId, ownerId) {
+  if (!ObjectId.isValid(resourceId)) {
+    return { status: 404, error: 'Resource not found.' };
+  }
+
+  const resource = await resourcesCollection.findOne({ _id: new ObjectId(resourceId) });
+  if (!resource) {
+    return { status: 404, error: 'Resource not found.' };
+  }
+
+  if (resource.owner !== ownerId) {
+    return { status: 403, error: 'Forbidden.' };
+  }
+
+  return { resource };
+}
+
+function buildPatchPayload(existingResource, payload) {
+  return {
+    title: payload?.title ?? existingResource.title,
+    description: payload?.description ?? existingResource.description,
+    cuisine: payload?.cuisine ?? existingResource.cuisine,
+    diet: payload?.diet ?? existingResource.diet,
+    meal_type: payload?.meal_type ?? existingResource.meal_type,
+    prep_time: payload?.prep_time ?? existingResource.prep_time,
+    cook_time: payload?.cook_time ?? existingResource.cook_time,
+    servings: payload?.servings ?? existingResource.servings,
+    image: payload?.image ?? existingResource.image,
+    ingredients: payload?.ingredients ?? existingResource.ingredients,
+    instructions: payload?.instructions ?? existingResource.instructions,
+    nutrition: payload?.nutrition ?? existingResource.nutrition,
+  };
+}
+
+async function updateResourceHandler(req, res, options = { partial: false }) {
+  try {
+    const db = getDB();
+    const resourcesCollection = db.collection('resources');
+    const access = await getOwnedResourceOrError(resourcesCollection, req.params.id, req.user.sub);
+
+    if (access.error) {
+      return res.status(access.status).json({ error: access.error });
+    }
+
+    const payload = options.partial ? buildPatchPayload(access.resource, req.body) : req.body;
+    const validation = validateResourcePayload(payload);
+    if (validation.error) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const update = {
+      title: validation.title,
+      description: validation.description,
+      cuisine: validation.cuisine,
+      diet: validation.diet,
+      meal_type: validation.meal_type,
+      prep_time: validation.prep_time,
+      cook_time: validation.cook_time,
+      servings: validation.servings,
+      image: validation.image,
+      ingredients: validation.ingredients,
+      instructions: validation.instructions,
+      nutrition: validation.nutrition,
+      updatedAt: new Date(),
+    };
+
+    await resourcesCollection.updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
+    const updatedResource = { ...access.resource, ...update };
+    await publishEvent('updated', updatedResource);
+    console.log(`[resource] updated id=${req.params.id} by=${req.user.username}`);
+    return res.json({ data: updatedResource, event: 'updated' });
+  } catch (error) {
+    console.error('[resource] error updating resource:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
 }
 
 app.get('/', (req, res) => {
@@ -238,49 +329,11 @@ app.post('/resources', authenticateToken, writeLimiter, async (req, res) => {
 });
 
 app.put('/resources/:id', authenticateToken, writeLimiter, async (req, res) => {
-  try {
-    const db = getDB();
-    const resourcesCollection = db.collection('resources');
-    const resource = await resourcesCollection.findOne({ _id: new ObjectId(req.params.id) });
+  updateResourceHandler(req, res, { partial: false });
+});
 
-    if (!resource) {
-      return res.status(404).json({ error: 'Resource not found.' });
-    }
-
-    if (resource.owner !== req.user.sub) {
-      return res.status(403).json({ error: 'Forbidden.' });
-    }
-
-    const validation = validateResourcePayload(req.body);
-    if (validation.error) {
-      return res.status(400).json({ error: validation.error });
-    }
-
-    const update = {
-      title: validation.title,
-      description: validation.description,
-      cuisine: validation.cuisine,
-      diet: validation.diet,
-      meal_type: validation.meal_type,
-      prep_time: validation.prep_time,
-      cook_time: validation.cook_time,
-      servings: validation.servings,
-      image: validation.image,
-      ingredients: validation.ingredients,
-      instructions: validation.instructions,
-      nutrition: validation.nutrition,
-      updatedAt: new Date(),
-    };
-
-    await resourcesCollection.updateOne({ _id: new ObjectId(req.params.id) }, { $set: update });
-    const updatedResource = { ...resource, ...update };
-    await publishEvent('updated', updatedResource);
-    console.log(`[resource] updated id=${req.params.id} by=${req.user.username}`);
-    res.json({ data: updatedResource, event: 'updated' });
-  } catch (error) {
-    console.error('[resource] error updating resource:', error);
-    res.status(500).json({ error: 'Internal server error.' });
-  }
+app.patch('/resources/:id', authenticateToken, writeLimiter, async (req, res) => {
+  updateResourceHandler(req, res, { partial: true });
 });
 
 app.delete('/resources/:id', authenticateToken, writeLimiter, async (req, res) => {

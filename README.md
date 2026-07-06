@@ -60,3 +60,8 @@ npm start
 
 - Usuário: demo
 - Senha: demo123
+
+## Eventos e fila de mensagens
+- O resource-service publica eventos de CRUD no notification-service ao final da operação.
+- Endpoint de enfileiramento: POST /events/queue
+- Endpoint de status da fila: GET /events/queue
