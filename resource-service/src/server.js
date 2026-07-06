@@ -3,6 +3,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 const http = require('http');
 const path = require('path');
 const { ObjectId } = require('mongodb');
@@ -17,7 +18,32 @@ const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http:/
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
 app.use(cors());
+app.use(helmet());
 app.use(express.json());
+
+function sanitizeObjectKeys(value) {
+  if (Array.isArray(value)) return value.map((item) => sanitizeObjectKeys(item));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).reduce((accumulator, [key, entryValue]) => {
+      const safeKey = key.replace(/\$/g, '').replace(/\./g, '');
+      if (!safeKey) return accumulator;
+      accumulator[safeKey] = sanitizeObjectKeys(entryValue);
+      return accumulator;
+    }, {});
+  }
+
+  if (typeof value === 'string') {
+    return value.replace(/[<>]/g, '').replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  }
+
+  return value;
+}
+
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === 'object') req.body = sanitizeObjectKeys(req.body);
+  if (req.query && typeof req.query === 'object') req.query = sanitizeObjectKeys(req.query);
+  next();
+});
 
 const writeLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

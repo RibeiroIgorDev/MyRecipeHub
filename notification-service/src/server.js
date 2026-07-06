@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const helmet = require('helmet');
 const { WebSocketServer } = require('ws');
 
 dotenv.config();
@@ -12,7 +13,32 @@ const PORT = process.env.PORT || 3004;
 const MAX_QUEUE_SIZE = Number(process.env.EVENT_QUEUE_MAX_SIZE || 1000);
 
 app.use(cors());
+app.use(helmet());
 app.use(express.json());
+
+function sanitizeObjectKeys(value) {
+  if (Array.isArray(value)) return value.map((item) => sanitizeObjectKeys(item));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).reduce((accumulator, [key, entryValue]) => {
+      const safeKey = key.replace(/\$/g, '').replace(/\./g, '');
+      if (!safeKey) return accumulator;
+      accumulator[safeKey] = sanitizeObjectKeys(entryValue);
+      return accumulator;
+    }, {});
+  }
+
+  if (typeof value === 'string') {
+    return value.replace(/[<>]/g, '').replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  }
+
+  return value;
+}
+
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === 'object') req.body = sanitizeObjectKeys(req.body);
+  if (req.query && typeof req.query === 'object') req.query = sanitizeObjectKeys(req.query);
+  next();
+});
 
 const clients = new Set();
 const eventQueue = [];

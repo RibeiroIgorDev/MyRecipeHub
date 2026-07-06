@@ -5,6 +5,7 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 const { ObjectId } = require('mongodb');
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -18,7 +19,32 @@ const JWT_TTL = process.env.JWT_TTL || '15m';
 const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004/events/queue';
 
 app.use(cors());
+app.use(helmet());
 app.use(express.json());
+
+function sanitizeObjectKeys(value) {
+  if (Array.isArray(value)) return value.map((item) => sanitizeObjectKeys(item));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).reduce((accumulator, [key, entryValue]) => {
+      const safeKey = key.replace(/\$/g, '').replace(/\./g, '');
+      if (!safeKey) return accumulator;
+      accumulator[safeKey] = sanitizeObjectKeys(entryValue);
+      return accumulator;
+    }, {});
+  }
+
+  if (typeof value === 'string') {
+    return value.replace(/[<>]/g, '').replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  }
+
+  return value;
+}
+
+app.use((req, res, next) => {
+  if (req.body && typeof req.body === 'object') req.body = sanitizeObjectKeys(req.body);
+  if (req.query && typeof req.query === 'object') req.query = sanitizeObjectKeys(req.query);
+  next();
+});
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
