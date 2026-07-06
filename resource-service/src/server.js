@@ -340,20 +340,16 @@ app.delete('/resources/:id', authenticateToken, writeLimiter, async (req, res) =
   try {
     const db = getDB();
     const resourcesCollection = db.collection('resources');
-    const resource = await resourcesCollection.findOne({ _id: new ObjectId(req.params.id) });
+    const access = await getOwnedResourceOrError(resourcesCollection, req.params.id, req.user.sub);
 
-    if (!resource) {
-      return res.status(404).json({ error: 'Resource not found.' });
-    }
-
-    if (resource.owner !== req.user.sub) {
-      return res.status(403).json({ error: 'Forbidden.' });
+    if (access.error) {
+      return res.status(access.status).json({ error: access.error });
     }
 
     await resourcesCollection.deleteOne({ _id: new ObjectId(req.params.id) });
-    await publishEvent('deleted', resource);
+    await publishEvent('deleted', access.resource);
     console.log(`[resource] deleted id=${req.params.id} by=${req.user.username}`);
-    res.json({ data: resource, event: 'deleted' });
+    res.json({ data: access.resource, event: 'deleted' });
   } catch (error) {
     console.error('[resource] error deleting resource:', error);
     res.status(500).json({ error: 'Internal server error.' });
