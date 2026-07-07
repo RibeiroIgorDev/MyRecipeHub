@@ -54,6 +54,14 @@ npm install
 npm start
 ```
 
+### Build otimizado (estáticos comprimidos)
+```bash
+cd myrecipehub/frontend
+npm run build
+```
+
+O build gera arquivos comprimidos `.gz` e `.br` dentro de `frontend/build` para entrega otimizada em produção (quando o servidor/CDN suporta precompressed assets).
+
 ## Credenciais de teste
 - Usuário: admin
 - Senha: admin123
