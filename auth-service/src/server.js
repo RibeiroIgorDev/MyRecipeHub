@@ -4,6 +4,7 @@ const dotenv = require('dotenv');
 const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const { ObjectId } = require('mongodb');
@@ -47,6 +48,7 @@ function hasSuspiciousContent(value) {
 
 app.use(cors());
 app.use(helmet());
+app.use(compression({ threshold: 1024 }));
 app.use(express.json());
 
 function sanitizeObjectKeys(value) {

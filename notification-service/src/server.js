@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const compression = require('compression');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
@@ -41,6 +42,14 @@ function hasSuspiciousContent(value) {
 
 app.use(cors());
 app.use(helmet());
+app.use(compression({
+  threshold: 1024,
+  filter: (req, res) => {
+    const upgradeHeader = String(req.headers.upgrade || '').toLowerCase();
+    if (upgradeHeader === 'websocket') return false;
+    return compression.filter(req, res);
+  },
+}));
 app.use(express.json());
 
 function sanitizeObjectKeys(value) {

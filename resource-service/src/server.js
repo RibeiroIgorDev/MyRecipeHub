@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const http = require('http');
@@ -46,6 +47,7 @@ function hasSuspiciousContent(value) {
 
 app.use(cors());
 app.use(helmet());
+app.use(compression({ threshold: 1024 }));
 app.use(express.json());
 
 function sanitizeObjectKeys(value) {
