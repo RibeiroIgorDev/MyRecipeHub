@@ -325,17 +325,13 @@ app.get('/resources/:id', authenticateToken, async (req, res) => {
   try {
     const db = getDB();
     const resourcesCollection = db.collection('resources');
-    const resource = await resourcesCollection.findOne({ _id: new ObjectId(req.params.id) });
+    const access = await getOwnedResourceOrError(resourcesCollection, req.params.id, req.user.sub);
 
-    if (!resource) {
-      return res.status(404).json({ error: 'Resource not found.' });
+    if (access.error) {
+      return res.status(access.status).json({ error: access.error });
     }
 
-    if (resource.owner !== req.user.sub) {
-      return res.status(403).json({ error: 'Forbidden.' });
-    }
-
-    res.json({ data: resource });
+    res.json({ data: access.resource });
   } catch (error) {
     console.error('[resource] error fetching resource:', error);
     res.status(500).json({ error: 'Internal server error.' });
