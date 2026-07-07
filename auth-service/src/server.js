@@ -17,6 +17,33 @@ const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const JWT_TTL = process.env.JWT_TTL || '15m';
 const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004/events/queue';
+const SERVICE_NAME = 'auth-service';
+
+function securityLog(event, details = {}) {
+  console.warn(
+    JSON.stringify({
+      level: 'warn',
+      type: 'security',
+      service: SERVICE_NAME,
+      event,
+      at: new Date().toISOString(),
+      ...details,
+    })
+  );
+}
+
+function hasSuspiciousContent(value) {
+  if (Array.isArray(value)) return value.some((entry) => hasSuspiciousContent(entry));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).some(([key, entryValue]) => key.includes('$') || key.includes('.') || hasSuspiciousContent(entryValue));
+  }
+
+  if (typeof value === 'string') {
+    return /[<>]|[\u0000-\u001F\u007F]/.test(value);
+  }
+
+  return false;
+}
 
 app.use(cors());
 app.use(helmet());
@@ -41,6 +68,17 @@ function sanitizeObjectKeys(value) {
 }
 
 app.use((req, res, next) => {
+  const suspiciousBody = req.body && typeof req.body === 'object' && hasSuspiciousContent(req.body);
+  const suspiciousQuery = req.query && typeof req.query === 'object' && hasSuspiciousContent(req.query);
+  if (suspiciousBody || suspiciousQuery) {
+    securityLog('input.sanitized', {
+      method: req.method,
+      path: req.path,
+      ip: req.ip,
+      userAgent: req.get('user-agent') || '',
+    });
+  }
+
   if (req.body && typeof req.body === 'object') req.body = sanitizeObjectKeys(req.body);
   if (req.query && typeof req.query === 'object') req.query = sanitizeObjectKeys(req.query);
   next();
@@ -117,6 +155,7 @@ async function authenticateToken(req, res, next) {
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
   if (!token) {
+    securityLog('auth.missing_token', { method: req.method, path: req.path, ip: req.ip });
     return res.status(401).json({ error: 'Authentication required.' });
   }
 
@@ -125,6 +164,7 @@ async function authenticateToken(req, res, next) {
     const revokedTokensCollection = db.collection('revoked_tokens');
     const isRevoked = await revokedTokensCollection.findOne({ token });
     if (isRevoked) {
+      securityLog('auth.revoked_token', { method: req.method, path: req.path, ip: req.ip });
       return res.status(401).json({ error: 'Token revoked.' });
     }
   } catch (err) {
@@ -133,6 +173,7 @@ async function authenticateToken(req, res, next) {
 
   jwt.verify(token, JWT_SECRET, (err, payload) => {
     if (err) {
+      securityLog('auth.invalid_token', { method: req.method, path: req.path, ip: req.ip });
       return res.status(401).json({ error: 'Invalid or expired token.' });
     }
 
@@ -168,6 +209,7 @@ app.post('/login', loginLimiter, async (req, res) => {
 
     if (!user) {
       console.log(`[auth] failed login for username=${username}`);
+      securityLog('auth.login_failed', { username, reason: 'invalid_credentials', ip: req.ip });
       await publishEvent('auth.login.failed', {
         username,
         reason: 'invalid_credentials',
@@ -179,6 +221,7 @@ app.post('/login', loginLimiter, async (req, res) => {
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
       console.log(`[auth] failed login for username=${username}`);
+      securityLog('auth.login_failed', { username, reason: 'invalid_credentials', ip: req.ip });
       await publishEvent('auth.login.failed', {
         username,
         reason: 'invalid_credentials',
@@ -242,16 +285,19 @@ app.post('/logout', authenticateToken, async (req, res) => {
 });
 
 app.all('/login', (req, res) => {
+  securityLog('http.method_not_allowed', { method: req.method, path: '/login', ip: req.ip });
   res.set('Allow', 'POST');
   res.status(405).json({ error: `Method ${req.method} not allowed on /login.` });
 });
 
 app.all('/logout', (req, res) => {
+  securityLog('http.method_not_allowed', { method: req.method, path: '/logout', ip: req.ip });
   res.set('Allow', 'POST');
   res.status(405).json({ error: `Method ${req.method} not allowed on /logout.` });
 });
 
 app.all('/me', (req, res) => {
+  securityLog('http.method_not_allowed', { method: req.method, path: '/me', ip: req.ip });
   res.set('Allow', 'GET');
   res.status(405).json({ error: `Method ${req.method} not allowed on /me.` });
 });

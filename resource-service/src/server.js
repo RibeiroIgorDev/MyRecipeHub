@@ -16,6 +16,33 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 3003;
 const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004/events/queue';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+const SERVICE_NAME = 'resource-service';
+
+function securityLog(event, details = {}) {
+  console.warn(
+    JSON.stringify({
+      level: 'warn',
+      type: 'security',
+      service: SERVICE_NAME,
+      event,
+      at: new Date().toISOString(),
+      ...details,
+    })
+  );
+}
+
+function hasSuspiciousContent(value) {
+  if (Array.isArray(value)) return value.some((entry) => hasSuspiciousContent(entry));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).some(([key, entryValue]) => key.includes('$') || key.includes('.') || hasSuspiciousContent(entryValue));
+  }
+
+  if (typeof value === 'string') {
+    return /[<>]|[\u0000-\u001F\u007F]/.test(value);
+  }
+
+  return false;
+}
 
 app.use(cors());
 app.use(helmet());
@@ -40,6 +67,17 @@ function sanitizeObjectKeys(value) {
 }
 
 app.use((req, res, next) => {
+  const suspiciousBody = req.body && typeof req.body === 'object' && hasSuspiciousContent(req.body);
+  const suspiciousQuery = req.query && typeof req.query === 'object' && hasSuspiciousContent(req.query);
+  if (suspiciousBody || suspiciousQuery) {
+    securityLog('input.sanitized', {
+      method: req.method,
+      path: req.path,
+      ip: req.ip,
+      userAgent: req.get('user-agent') || '',
+    });
+  }
+
   if (req.body && typeof req.body === 'object') req.body = sanitizeObjectKeys(req.body);
   if (req.query && typeof req.query === 'object') req.query = sanitizeObjectKeys(req.query);
   next();
@@ -77,11 +115,13 @@ function authenticateToken(req, res, next) {
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
 
   if (!token) {
+    securityLog('auth.missing_token', { method: req.method, path: req.path, ip: req.ip });
     return res.status(401).json({ error: 'Authentication required.' });
   }
 
   jwt.verify(token, JWT_SECRET, (err, payload) => {
     if (err) {
+      securityLog('auth.invalid_token', { method: req.method, path: req.path, ip: req.ip });
       return res.status(401).json({ error: 'Invalid or expired token.' });
     }
 
@@ -211,6 +251,7 @@ function validateResourcePayload(payload) {
 
 async function getOwnedResourceOrError(resourcesCollection, resourceId, ownerId) {
   if (!ObjectId.isValid(resourceId)) {
+    securityLog('resource.invalid_id', { resourceId, ownerId });
     return { status: 404, error: 'Resource not found.' };
   }
 
@@ -220,6 +261,11 @@ async function getOwnedResourceOrError(resourcesCollection, resourceId, ownerId)
   }
 
   if (resource.owner !== ownerId) {
+    securityLog('resource.forbidden_access', {
+      resourceId,
+      ownerId,
+      resourceOwnerId: resource.owner,
+    });
     return { status: 403, error: 'Forbidden.' };
   }
 
@@ -406,11 +452,13 @@ app.delete('/resources/:id', authenticateToken, writeLimiter, async (req, res) =
 });
 
 app.all('/resources', (req, res) => {
+  securityLog('http.method_not_allowed', { method: req.method, path: '/resources', ip: req.ip });
   res.set('Allow', 'GET, POST');
   res.status(405).json({ error: `Method ${req.method} not allowed on /resources.` });
 });
 
 app.all('/resources/:id', (req, res) => {
+  securityLog('http.method_not_allowed', { method: req.method, path: '/resources/:id', ip: req.ip });
   res.set('Allow', 'GET, PUT, PATCH, DELETE');
   res.status(405).json({ error: `Method ${req.method} not allowed on /resources/:id.` });
 });

@@ -11,6 +11,33 @@ const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3004;
 const MAX_QUEUE_SIZE = Number(process.env.EVENT_QUEUE_MAX_SIZE || 1000);
+const SERVICE_NAME = 'notification-service';
+
+function securityLog(event, details = {}) {
+  console.warn(
+    JSON.stringify({
+      level: 'warn',
+      type: 'security',
+      service: SERVICE_NAME,
+      event,
+      at: new Date().toISOString(),
+      ...details,
+    })
+  );
+}
+
+function hasSuspiciousContent(value) {
+  if (Array.isArray(value)) return value.some((entry) => hasSuspiciousContent(entry));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).some(([key, entryValue]) => key.includes('$') || key.includes('.') || hasSuspiciousContent(entryValue));
+  }
+
+  if (typeof value === 'string') {
+    return /[<>]|[\u0000-\u001F\u007F]/.test(value);
+  }
+
+  return false;
+}
 
 app.use(cors());
 app.use(helmet());
@@ -35,6 +62,17 @@ function sanitizeObjectKeys(value) {
 }
 
 app.use((req, res, next) => {
+  const suspiciousBody = req.body && typeof req.body === 'object' && hasSuspiciousContent(req.body);
+  const suspiciousQuery = req.query && typeof req.query === 'object' && hasSuspiciousContent(req.query);
+  if (suspiciousBody || suspiciousQuery) {
+    securityLog('input.sanitized', {
+      method: req.method,
+      path: req.path,
+      ip: req.ip,
+      userAgent: req.get('user-agent') || '',
+    });
+  }
+
   if (req.body && typeof req.body === 'object') req.body = sanitizeObjectKeys(req.body);
   if (req.query && typeof req.query === 'object') req.query = sanitizeObjectKeys(req.query);
   next();
@@ -146,6 +184,7 @@ app.get('/events/queue', (req, res) => {
 app.post('/events/queue', (req, res) => {
   const validation = validateEventPayload(req.body);
   if (validation.error) {
+    securityLog('events.invalid_payload', { path: '/events/queue', ip: req.ip });
     return res.status(400).json({ error: validation.error });
   }
 
@@ -157,6 +196,7 @@ app.post('/events/queue', (req, res) => {
 app.post('/events', (req, res) => {
   const validation = validateEventPayload(req.body);
   if (validation.error) {
+    securityLog('events.invalid_payload', { path: '/events', ip: req.ip });
     return res.status(400).json({ error: validation.error });
   }
 
@@ -166,11 +206,13 @@ app.post('/events', (req, res) => {
 });
 
 app.all('/events', (req, res) => {
+  securityLog('http.method_not_allowed', { method: req.method, path: '/events', ip: req.ip });
   res.set('Allow', 'POST');
   res.status(405).json({ error: `Method ${req.method} not allowed on /events.` });
 });
 
 app.all('/events/queue', (req, res) => {
+  securityLog('http.method_not_allowed', { method: req.method, path: '/events/queue', ip: req.ip });
   res.set('Allow', 'GET, POST');
   res.status(405).json({ error: `Method ${req.method} not allowed on /events/queue.` });
 });
