@@ -46,7 +46,7 @@ export default function LoginForm({ onLogin, loading, error }) {
               name="password"
               type="password"
               autoComplete="current-password"
-              value={password}d
+              value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Digite sua senha"
             />

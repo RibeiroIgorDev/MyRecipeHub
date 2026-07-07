@@ -36,7 +36,7 @@ function AppContent({ authToken }) {
   const { recipes, loading, error, page, lastPage } = state;
 
   useEffect(() => {
-    searchRecipes('portuguese', 1);
+    searchRecipes('bolo de cenoura', 1);
   }, [searchRecipes]);
 
   const handlePageChange = (nextPage) => {

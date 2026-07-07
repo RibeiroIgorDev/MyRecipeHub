@@ -286,6 +286,10 @@ app.post('/logout', authenticateToken, async (req, res) => {
   res.json({ message: 'Logout successful.' });
 });
 
+app.get('/me', authenticateToken, async (req, res) => {
+  res.json({ user: { id: req.user.sub, username: req.user.username, role: req.user.role } });
+});
+
 app.all('/login', (req, res) => {
   securityLog('http.method_not_allowed', { method: req.method, path: '/login', ip: req.ip });
   res.set('Allow', 'POST');
@@ -302,10 +306,6 @@ app.all('/me', (req, res) => {
   securityLog('http.method_not_allowed', { method: req.method, path: '/me', ip: req.ip });
   res.set('Allow', 'GET');
   res.status(405).json({ error: `Method ${req.method} not allowed on /me.` });
-});
-
-app.get('/me', authenticateToken, async (req, res) => {
-  res.json({ user: { id: req.user.sub, username: req.user.username, role: req.user.role } });
 });
 
 (async () => {

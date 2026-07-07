@@ -1,15 +1,16 @@
-import React, { createContext, useReducer, useCallback } from 'react';
+import React, { createContext, useReducer, useCallback, useEffect } from 'react';
 
 export const RecipeContext = createContext();
 
 const RESOURCE_SERVICE_URL = process.env.REACT_APP_RESOURCE_SERVICE_URL || 'http://localhost:3003';
+const NOTIFICATION_SERVICE_URL = process.env.REACT_APP_NOTIFICATION_SERVICE_URL || 'ws://localhost:3004';
 
 const initialState = {
   recipes: [],
   selectedRecipe: null,
   loading: false,
   error: '',
-  searchTerm: 'portuguese',
+  searchTerm: 'bolo de cenoura',
   page: 1,
   lastPage: 1,
   validationError: '',
@@ -25,6 +26,9 @@ const actionTypes = {
   SET_PAGE: 'SET_PAGE',
   SET_PAGINATION: 'SET_PAGINATION',
   RESET_VALIDATION_ERROR: 'RESET_VALIDATION_ERROR',
+  ADD_RECIPE: 'ADD_RECIPE',
+  UPDATE_RECIPE: 'UPDATE_RECIPE',
+  REMOVE_RECIPE: 'REMOVE_RECIPE',
 };
 
 function recipeReducer(state, action) {
@@ -47,6 +51,19 @@ function recipeReducer(state, action) {
       return { ...state, page: action.payload.page, lastPage: action.payload.lastPage };
     case actionTypes.RESET_VALIDATION_ERROR:
       return { ...state, validationError: '' };
+    case actionTypes.ADD_RECIPE:
+      return { ...state, recipes: [normalizeRecipe(action.payload), ...state.recipes] };
+    case actionTypes.UPDATE_RECIPE:
+      return {
+        ...state,
+        recipes: state.recipes.map((r) => (r.id === action.payload.id ? normalizeRecipe(action.payload) : r)),
+      };
+    case actionTypes.REMOVE_RECIPE:
+      return {
+        ...state,
+        recipes: state.recipes.filter((r) => r.id !== action.payload),
+        selectedRecipe: state.selectedRecipe?.id === action.payload ? null : state.selectedRecipe,
+      };
     default:
       return state;
   }
@@ -167,6 +184,45 @@ export function RecipeProvider({ children, authToken }) {
     dispatch({ type: actionTypes.SET_SELECTED_RECIPE, payload: null });
   }, []);
 
+  const addRecipe = useCallback((recipe) => {
+    dispatch({ type: actionTypes.ADD_RECIPE, payload: recipe });
+  }, []);
+
+  const updateRecipe = useCallback((recipe) => {
+    dispatch({ type: actionTypes.UPDATE_RECIPE, payload: recipe });
+  }, []);
+
+  const removeRecipe = useCallback((recipeId) => {
+    dispatch({ type: actionTypes.REMOVE_RECIPE, payload: recipeId });
+  }, []);
+
+  // Listener para sincronizar com ResourceManager via WebSocket
+  useEffect(() => {
+    // Não conecta WebSocket em ambiente de teste
+    if (typeof WebSocket === 'undefined' || process.env.NODE_ENV === 'test') {
+      return undefined;
+    }
+
+    const socket = new WebSocket(NOTIFICATION_SERVICE_URL);
+
+    socket.addEventListener('message', (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload?.type === 'recipe.created' && payload?.payload?._id) {
+          addRecipe(payload.payload);
+        } else if (payload?.type === 'recipe.updated' && payload?.payload?._id) {
+          updateRecipe(payload.payload);
+        } else if (payload?.type === 'recipe.deleted' && payload?.payload?._id) {
+          removeRecipe(payload.payload._id);
+        }
+      } catch {
+        // Ignore malformed payloads.
+      }
+    });
+
+    return () => socket.close();
+  }, [addRecipe, updateRecipe, removeRecipe]);
+
   const value = {
     state,
     dispatch,
@@ -174,6 +230,9 @@ export function RecipeProvider({ children, authToken }) {
     getRecipeDetail,
     updateSearchTerm,
     closeRecipeDetail,
+    addRecipe,
+    updateRecipe,
+    removeRecipe,
   };
 
   return <RecipeContext.Provider value={value}>{children}</RecipeContext.Provider>;

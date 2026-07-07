@@ -248,31 +248,31 @@ function validateResourcePayload(payload) {
   const servingsNumber = Number(servings);
 
   if (!title || !description || !cuisine || !diet || !mealType || !prepTime || !cookTime || !servings || !image || ingredients.length === 0 || instructions.length === 0) {
-    return { error: 'All fields are required except nutrition.' };
+    return { error: 'Todos os campos são obrigatórios, exceto nutrição.' };
   }
 
   if (title.length < 3) {
-    return { error: 'title must contain at least 3 characters.' };
+    return { error: 'O título deve conter pelo menos 3 caracteres.' };
   }
 
   if (description.length < 10) {
-    return { error: 'description must contain at least 10 characters.' };
+    return { error: 'A descrição deve conter pelo menos 10 caracteres.' };
   }
 
   if (!/^https?:\/\/.+/.test(image)) {
-    return { error: 'image must be a valid URL starting with http:// or https://.' };
+    return { error: 'A imagem deve ser uma URL válida começando com http:// ou https://.' };
   }
 
   if (!Number.isInteger(prepTimeNumber) || prepTimeNumber <= 0) {
-    return { error: 'prep_time must be a positive integer.' };
+    return { error: 'O tempo de preparo deve ser um número inteiro positivo.' };
   }
 
   if (!Number.isInteger(cookTimeNumber) || cookTimeNumber <= 0) {
-    return { error: 'cook_time must be a positive integer.' };
+    return { error: 'O tempo de cozimento deve ser um número inteiro positivo.' };
   }
 
   if (!Number.isInteger(servingsNumber) || servingsNumber <= 0) {
-    return { error: 'servings must be a positive integer.' };
+    return { error: 'O número de porções deve ser um número inteiro positivo.' };
   }
 
   return {

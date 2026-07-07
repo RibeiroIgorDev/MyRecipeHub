@@ -22,6 +22,7 @@ import {
 
 const RESOURCE_SERVICE_URL = process.env.REACT_APP_RESOURCE_SERVICE_URL || 'http://localhost:3003';
 const NOTIFICATION_SERVICE_URL = process.env.REACT_APP_NOTIFICATION_SERVICE_URL || 'ws://localhost:3004';
+const EVENTS_API_URL = 'http://localhost:3004/events';
 
 const createInitialFormState = () => ({
   title: '',
@@ -217,7 +218,19 @@ export default function ResourceManager({ authToken }) {
         const payload = JSON.parse(event.data);
         if (payload?.type) {
           setMessage(`Atualização recebida: ${payload.type}`);
-          loadResources();
+          // Se o payload contém dados de recursos, atualiza estado local
+          if (payload?.data) {
+            if (Array.isArray(payload.data)) {
+              setResources(payload.data);
+            } else if (payload.data._id) {
+              setResources((current) => {
+                const exists = current.find((r) => r._id === payload.data._id);
+                return exists
+                  ? current.map((r) => (r._id === payload.data._id ? payload.data : r))
+                  : [payload.data, ...current];
+              });
+            }
+          }
         }
       } catch {
         // Ignore malformed payloads.
@@ -225,7 +238,7 @@ export default function ResourceManager({ authToken }) {
     });
 
     return () => socket.close();
-  }, [authToken, loadResources]);
+  }, [authToken]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -262,9 +275,27 @@ export default function ResourceManager({ authToken }) {
 
       setMessage(editingId ? 'Receita atualizada com sucesso.' : 'Receita criada com sucesso.');
       setForm(createInitialFormState());
-      setEditingId(null);
       setFieldErrors({});
-      loadResources();
+
+      if (editingId && data.data) {
+        setResources((current) => current.map((r) => (r._id === editingId ? data.data : r)));
+      } else if (data.data) {
+        setResources((current) => [data.data, ...current]);
+      }
+
+      setEditingId(null);
+
+      // Publica evento para sincronizar com RecipeContext
+      try {
+        const eventType = editingId ? 'recipe.updated' : 'recipe.created';
+        await fetch(EVENTS_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: eventType, payload: data.data }),
+        });
+      } catch {
+        // Falha silenciosa se não conseguir publicar evento
+      }
     } catch (err) {
       setError(err.message || 'Falha ao salvar receita.');
     } finally {
@@ -312,7 +343,18 @@ export default function ResourceManager({ authToken }) {
       if (!response.ok) throw new Error(data.error || 'Falha ao excluir receita.');
 
       setMessage('Receita removida com sucesso.');
-      loadResources();
+      setResources((current) => current.filter((r) => r._id !== resource._id));
+
+      // Publica evento para sincronizar com RecipeContext
+      try {
+        await fetch(EVENTS_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'recipe.deleted', payload: { _id: resource._id } }),
+        });
+      } catch {
+        // Falha silenciosa se não conseguir publicar evento
+      }
     } catch (err) {
       setError(err.message || 'Falha ao excluir receita.');
     } finally {
@@ -325,7 +367,7 @@ export default function ResourceManager({ authToken }) {
       <ResourceHeader>
         <div>
           <h2>Gerenciar receitas</h2>
-          <p>Crie, edite e remova receitas.</p>
+          <p>Crie, busque, edite e remova receitas.</p>
         </div>
       </ResourceHeader>
 
