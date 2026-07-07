@@ -74,3 +74,8 @@ O build gera arquivos comprimidos `.gz` e `.br` dentro de `frontend/build` para 
 - O auth-service publica eventos de autenticação (login/logout) no notification-service.
 - Endpoint de enfileiramento: POST /events/queue
 - Endpoint de status da fila: GET /events/queue
+
+## Otimização de cache no backend
+- O resource-service aplica cache em memória para leituras (`GET /resources` e `GET /resources/:id`).
+- TTL configurável por variável de ambiente: `RESOURCE_CACHE_TTL_MS` (padrão: `30000`).
+- O cache é invalidado automaticamente em operações de escrita (create, update, delete).

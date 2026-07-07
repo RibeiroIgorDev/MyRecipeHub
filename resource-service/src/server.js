@@ -18,6 +18,8 @@ const PORT = process.env.PORT || 3003;
 const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:3004/events/queue';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const SERVICE_NAME = 'resource-service';
+const RESOURCE_CACHE_TTL_MS = Number(process.env.RESOURCE_CACHE_TTL_MS || 30000);
+const resourceReadCache = new Map();
 
 function securityLog(event, details = {}) {
   console.warn(
@@ -43,6 +45,44 @@ function hasSuspiciousContent(value) {
   }
 
   return false;
+}
+
+function buildResourceCacheKey(ownerId, keyType, rawKey) {
+  return `${ownerId}::${keyType}::${rawKey}`;
+}
+
+function readFromCache(cacheKey) {
+  const cached = resourceReadCache.get(cacheKey);
+  if (!cached) return null;
+
+  if (cached.expiresAt <= Date.now()) {
+    resourceReadCache.delete(cacheKey);
+    return null;
+  }
+
+  return cached.value;
+}
+
+function writeToCache(cacheKey, value) {
+  resourceReadCache.set(cacheKey, {
+    value,
+    expiresAt: Date.now() + RESOURCE_CACHE_TTL_MS,
+  });
+}
+
+function invalidateOwnerCache(ownerId) {
+  const ownerPrefix = `${ownerId}::`;
+  for (const cacheKey of resourceReadCache.keys()) {
+    if (cacheKey.startsWith(ownerPrefix)) {
+      resourceReadCache.delete(cacheKey);
+    }
+  }
+}
+
+function applyPrivateCacheHeaders(res) {
+  const maxAge = Math.max(1, Math.floor(RESOURCE_CACHE_TTL_MS / 1000));
+  res.set('Cache-Control', `private, max-age=${maxAge}`);
+  res.set('Vary', 'Authorization');
 }
 
 app.use(cors());
@@ -350,6 +390,14 @@ app.get('/resources', authenticateToken, async (req, res) => {
   try {
     const query = sanitizeInput(req.query?.q || '');
     const ownerId = req.user?.sub;
+    const cacheKey = buildResourceCacheKey(ownerId, 'list', query.toLowerCase());
+    const cachedResources = readFromCache(cacheKey);
+    applyPrivateCacheHeaders(res);
+    if (cachedResources) {
+      res.set('X-Cache', 'HIT');
+      return res.json({ data: cachedResources });
+    }
+
     const db = getDB();
     const resourcesCollection = db.collection('resources');
 
@@ -362,6 +410,8 @@ app.get('/resources', authenticateToken, async (req, res) => {
     }
 
     const resources = await resourcesCollection.find(filter).toArray();
+    writeToCache(cacheKey, resources);
+    res.set('X-Cache', 'MISS');
     res.json({ data: resources });
   } catch (error) {
     console.error('[resource] error fetching resources:', error);
@@ -371,14 +421,25 @@ app.get('/resources', authenticateToken, async (req, res) => {
 
 app.get('/resources/:id', authenticateToken, async (req, res) => {
   try {
+    const ownerId = req.user?.sub;
+    const cacheKey = buildResourceCacheKey(ownerId, 'detail', req.params.id);
+    const cachedResource = readFromCache(cacheKey);
+    applyPrivateCacheHeaders(res);
+    if (cachedResource) {
+      res.set('X-Cache', 'HIT');
+      return res.json({ data: cachedResource });
+    }
+
     const db = getDB();
     const resourcesCollection = db.collection('resources');
-    const access = await getOwnedResourceOrError(resourcesCollection, req.params.id, req.user.sub);
+    const access = await getOwnedResourceOrError(resourcesCollection, req.params.id, ownerId);
 
     if (access.error) {
       return res.status(access.status).json({ error: access.error });
     }
 
+    writeToCache(cacheKey, access.resource);
+    res.set('X-Cache', 'MISS');
     res.json({ data: access.resource });
   } catch (error) {
     console.error('[resource] error fetching resource:', error);
@@ -416,6 +477,7 @@ app.post('/resources', authenticateToken, writeLimiter, async (req, res) => {
 
     const result = await resourcesCollection.insertOne(resource);
     const createdResource = { _id: result.insertedId, ...resource };
+    invalidateOwnerCache(req.user.sub);
     await publishEvent('created', createdResource);
     console.log(`[resource] created id=${result.insertedId} by=${req.user.username}`);
     res.status(201).json({ data: createdResource, event: 'created' });
@@ -444,6 +506,7 @@ app.delete('/resources/:id', authenticateToken, writeLimiter, async (req, res) =
     }
 
     await resourcesCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+    invalidateOwnerCache(req.user.sub);
     await publishEvent('deleted', access.resource);
     console.log(`[resource] deleted id=${req.params.id} by=${req.user.username}`);
     res.json({ data: access.resource, event: 'deleted' });
